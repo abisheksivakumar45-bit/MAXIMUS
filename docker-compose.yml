@@ -1,0 +1,76 @@
+# =============================================================================
+# MAXIMUS — local development stack.
+#
+#   docker compose up --build     start everything (PostgreSQL + API + UI)
+#   docker compose down           stop everything (data is preserved)
+#   docker compose logs -f        follow logs
+#
+# Credentials come from the git-ignored `.env` file (defaults shown here are
+# development-only placeholders and must not be used anywhere real).
+# =============================================================================
+name: maximus
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-maximus_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_local_only}
+      POSTGRES_DB: ${POSTGRES_DB:-maximus_dev}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      # Named volume: database data survives `docker compose down`.
+      - maximus_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      APP_ENV: ${APP_ENV:-development}
+      APP_VERSION: ${APP_VERSION:-0.1.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Inside the Compose network the database host is `db`.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maximus_dev}:${POSTGRES_PASSWORD:-change_me_local_only}@db:5432/${POSTGRES_DB:-maximus_dev}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      SECRET_KEY: ${SECRET_KEY:-}
+    ports:
+      - '${BACKEND_PORT:-8000}:8000'
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; r=urllib.request.urlopen('http://127.0.0.1:8000/api/health/live', timeout=3); sys.exit(0 if r.status==200 else 1)"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: ./frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # The dev server proxies browser requests from /api to the backend.
+      VITE_PROXY_TARGET: http://backend:8000
+      VITE_API_BASE_URL: ''
+    ports:
+      - '${FRONTEND_PORT:-5173}:5173'
+
+volumes:
+  maximus_pgdata:

@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+
+/*
+ * MAXIMUS design tokens.
+ * Dark-first, charcoal base, restrained gold accent, subtle borders.
+ * Every colour/radius/duration used in the UI should come from here so the
+ * visual identity stays consistent as features are added.
+ */
+@theme {
+  --color-canvas: #08090b;
+  --color-surface: #0f1218;
+  --color-surface-raised: #161a22;
+  --color-line: #232a36;
+  --color-line-strong: #313a4a;
+  --color-ink: #e9ecf1;
+  --color-muted: #98a2b3;
+  --color-faint: #6b7688;
+  --color-accent: #e8b44a;
+  --color-accent-strong: #f3c766;
+  --color-accent-contrast: #1a1408;
+  --color-positive: #3ecf8e;
+  --color-danger: #f0616d;
+  --color-info: #6aa6ff;
+
+  --radius-card: 0.875rem;
+  --radius-control: 0.5rem;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+    sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, 'Courier New', monospace;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-canvas text-ink font-sans antialiased;
+    min-height: 100dvh;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+
+  h1,
+  h2,
+  h3 {
+    @apply text-ink;
+    text-wrap: balance;
+  }
+}
+
+/* Respect the user's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

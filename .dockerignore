@@ -1,0 +1,15 @@
+# Root build context ignore rules (used if a service builds from the repo root).
+.git
+.gitignore
+docs/
+**/node_modules/
+**/.venv/
+**/dist/
+**/coverage/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+.env
+.env.*
+!.env.example
+*.log
