@@ -76,3 +76,53 @@ def test_downgrade_removes_users_table(alembic_config) -> None:
         assert "users" not in inspect(engine).get_table_names()
     finally:
         engine.dispose()
+
+
+def test_upgrade_creates_auth_sessions_table(alembic_config) -> None:
+    config, database_url = alembic_config
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        assert "auth_sessions" in inspector.get_table_names()
+
+        columns = {column["name"] for column in inspector.get_columns("auth_sessions")}
+        assert columns == {
+            "id",
+            "user_id",
+            "token_hash",
+            "created_at",
+            "expires_at",
+            "last_used_at",
+            "revoked_at",
+        }
+
+        token_indexes = [
+            index
+            for index in inspector.get_indexes("auth_sessions")
+            if index["column_names"] == ["token_hash"]
+        ]
+        assert token_indexes and token_indexes[0]["unique"]
+
+        foreign_keys = inspector.get_foreign_keys("auth_sessions")
+        assert any(fk["referred_table"] == "users" for fk in foreign_keys)
+    finally:
+        engine.dispose()
+
+
+def test_downgrade_removes_auth_sessions_table(alembic_config) -> None:
+    config, database_url = alembic_config
+
+    command.upgrade(config, "head")
+    command.downgrade(config, "0001")
+
+    engine = create_engine(database_url)
+    try:
+        tables = inspect(engine).get_table_names()
+        assert "auth_sessions" not in tables
+        # Downgrading one revision keeps the earlier schema intact.
+        assert "users" in tables
+    finally:
+        engine.dispose()

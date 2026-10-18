@@ -32,6 +32,13 @@ export const NAV_SECTIONS: NavSection[] = [
         implemented: true,
         description: 'Today’s mission, service status, and progress at a glance.',
       },
+      {
+        label: 'Profile',
+        path: '/profile',
+        phase: 2,
+        implemented: true,
+        description: 'Your account details and display name.',
+      },
     ],
   },
   {

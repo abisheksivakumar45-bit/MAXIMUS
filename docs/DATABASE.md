@@ -11,26 +11,39 @@ SQLAlchemy 2.x models and Alembic migrations.
 - **Ownership**: user-owned tables reference `users.id`. Child rows use
   `ON DELETE CASCADE`; deleting a user must never orphan records.
 - **Constraints**: unique constraints and indexes are declared explicitly.
-- **No secrets**: sensitive data is stored only when required, and passwords
-  are only ever stored as hashes (Phase 2).
+- **No secrets**: passwords are stored only as Argon2id hashes, and session
+  tokens only as HMAC hashes — no plaintext credential or token is ever
+  persisted.
 
-## 2. Current tables (Phase 1)
+## 2. Current tables (Phase 2)
 
 ### `users`
 
-The ownership root. Created in migration `0001`. Authentication endpoints do
-not exist yet — the table is created now because every later user-owned table
-depends on it, and doing so avoids a throwaway baseline migration.
+The ownership root. Created in migration `0001`.
 
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | UUID | Primary key. |
-| `email` | VARCHAR(320) | Unique, indexed. |
-| `password_hash` | VARCHAR(255) | Hash only — never plaintext. |
+| `email` | VARCHAR(320) | Unique, indexed; normalised to lowercase. |
+| `password_hash` | VARCHAR(255) | Argon2id hash only — never plaintext. |
 | `display_name` | VARCHAR(120) | Nullable. |
 | `is_active` | BOOLEAN | Default `true`; used to disable accounts. |
 | `created_at` | TIMESTAMPTZ | Server default `now()`. |
 | `updated_at` | TIMESTAMPTZ | Server default `now()`, auto-updated. |
+
+### `auth_sessions`
+
+Added in migration `0002`. One row per active (or revoked) login session.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Primary key. |
+| `user_id` | UUID | FK → `users.id`, `ON DELETE CASCADE`, indexed. |
+| `token_hash` | VARCHAR(64) | HMAC-SHA256 hex of the session token; **unique**, indexed. The raw token is never stored. |
+| `created_at` | TIMESTAMPTZ | Server default `now()`. |
+| `expires_at` | TIMESTAMPTZ | Indexed; enforced on every request. |
+| `last_used_at` | TIMESTAMPTZ | Refreshed on use (sliding renewal). |
+| `revoked_at` | TIMESTAMPTZ | Nullable; set on logout. A non-null value means the session is dead. |
 
 The wider table set (goals, roadmaps, daily tasks, XP transactions, …) is
 introduced in the phases that implement their features — see
@@ -39,8 +52,9 @@ implementation, never speculatively.
 
 ## 3. Migrations
 
-Alembic reads `DATABASE_URL` from the environment (`alembic/env.py`); the URL is
-never stored in `alembic.ini` or version control.
+Applied revisions (as of Phase 2): `0001` (baseline `users`) → `0002`
+(`auth_sessions`). Alembic reads `DATABASE_URL` from the environment
+(`alembic/env.py`); the URL is never stored in `alembic.ini` or version control.
 
 ```bash
 # Inside the backend container (compose runs this automatically on startup):

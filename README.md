@@ -4,11 +4,13 @@ MAXIMUS is an AI-powered personal growth and life-management web application.
 It is designed to turn personal ambitions into structured roadmaps, realistic
 daily plans, measurable actions, and continuous improvement.
 
-> **Development status: Phase 1 — Foundation.**
+> **Development status: Phase 2 — Authentication & Profile.**
 > The application shell, backend, PostgreSQL database, migrations, health
-> endpoints, and local development stack are implemented and verified. Product
-> features (authentication, goals, roadmaps, planning, nutrition, fitness, AI
-> coaching, …) are **not** implemented yet and are labelled honestly in the UI.
+> endpoints, local development stack, and **authentication + user profile**
+> (registration, login, logout, server-managed sessions, CSRF protection,
+> protected routes, profile view/edit) are implemented and verified. Later
+> product features (goals, roadmaps, planning, nutrition, fitness, AI coaching,
+> …) are **not** implemented yet and are labelled honestly in the UI.
 > See [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 The authoritative product specification is [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md).
@@ -90,8 +92,12 @@ git-ignored and must never be committed.
 | `POSTGRES_PORT` | `5432` | Host port for PostgreSQL. |
 | `DATABASE_URL` | `postgresql+psycopg://…@localhost:5432/maximus_dev` | Used when running the backend on the host. URL-encode special characters in the password. |
 | `BACKEND_PORT` | `8000` | Host port for the API. |
-| `BACKEND_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed browser origins (strict CORS). |
-| `SECRET_KEY` | *(empty)* | Required from Phase 2 (session signing). Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. |
+| `BACKEND_CORS_ORIGINS` | `http://localhost:5173,http://127.0.0.1:5173` | Allowed browser origins (strict CORS, credentials enabled for the session cookie). |
+| `SECRET_KEY` | *(required, no default)* | Signs session cookies (HMAC). **Must be ≥ 32 characters**; the backend refuses to start otherwise. Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. |
+| `SESSION_LIFETIME_DAYS` | `30` | Sliding session lifetime in days. |
+| `COOKIE_SECURE` | `false` | Set the session cookie `Secure` flag. Keep `false` for local HTTP; set `true` behind HTTPS. |
+| `AUTH_RATE_LIMIT_ATTEMPTS` | `10` | Max auth requests per client per window before `429`. |
+| `AUTH_RATE_LIMIT_WINDOW_SECONDS` | `60` | Rate-limit window length in seconds. |
 | `FRONTEND_PORT` | `5173` | Host port for the UI. |
 | `VITE_API_BASE_URL` | *(empty)* | Empty = use the dev-server `/api` proxy. |
 
@@ -168,7 +174,19 @@ npm run build       # production build
 | `GET` | `/api/health` | Service metadata (name, version, environment, time). No DB access. |
 | `GET` | `/api/health/live` | Liveness probe. Always 200 while the process runs. |
 | `GET` | `/api/health/ready` | Readiness probe. Runs `SELECT 1`; returns **503** if PostgreSQL is unreachable. |
+| `POST` | `/api/auth/register` | Create an account and start a session. |
+| `POST` | `/api/auth/login` | Authenticate and start a session. |
+| `POST` | `/api/auth/logout` | Revoke the current session. |
+| `GET` | `/api/auth/me` | Return the authenticated user (used to restore auth state on load). |
+| `GET` | `/api/profile` | Return the authenticated user's profile. |
+| `PATCH` | `/api/profile` | Update the authenticated user's display name. |
 | `GET` | `/api/docs` | Interactive OpenAPI docs (disabled when `APP_ENV=production`). |
+
+Authentication uses an **opaque, server-managed session** stored in an
+`HttpOnly` cookie (`maximus_session`). State-changing requests must also send the
+double-submit CSRF token: read the non-`HttpOnly` `maximus_csrf` cookie (set on
+any safe request) and echo it in the `X-CSRF-Token` header. The frontend API
+client does this automatically.
 
 ---
 

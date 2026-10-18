@@ -44,7 +44,13 @@ services:
       # Inside the Compose network the database host is `db`.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-maximus_dev}:${POSTGRES_PASSWORD:-change_me_local_only}@db:5432/${POSTGRES_DB:-maximus_dev}
       BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+      # Session/auth settings (Phase 2). SECRET_KEY is mandatory — the backend
+      # refuses to start if it is empty or shorter than 32 characters.
       SECRET_KEY: ${SECRET_KEY:-}
+      SESSION_LIFETIME_DAYS: ${SESSION_LIFETIME_DAYS:-30}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      AUTH_RATE_LIMIT_ATTEMPTS: ${AUTH_RATE_LIMIT_ATTEMPTS:-10}
+      AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
     ports:
       - '${BACKEND_PORT:-8000}:8000'
     healthcheck:

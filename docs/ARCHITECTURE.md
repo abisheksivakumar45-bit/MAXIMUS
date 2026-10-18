@@ -31,11 +31,14 @@ MAXIMUS/
 ├── backend/                 FastAPI application
 │   ├── app/
 │   │   ├── main.py          create_app() factory, middleware, error handling
-│   │   ├── core/            config (pydantic-settings), logging
+│   │   ├── core/            config, logging, security (hashing/tokens),
+│   │   │                    rate_limit, csrf
 │   │   ├── db/              declarative base, mixins, engine/session factory
-│   │   ├── models/          SQLAlchemy ORM models
+│   │   ├── models/          SQLAlchemy ORM models (user, auth_session)
 │   │   ├── schemas/         Pydantic request/response schemas
-│   │   ├── api/routes/      HTTP routers (thin: delegate to services)
+│   │   ├── repositories/    data access (user, session)
+│   │   ├── services/        business logic (auth_service)
+│   │   ├── api/             deps (current user) + routes (thin: delegate)
 │   │   └── tests/           pytest suite (runs on SQLite, no DB required)
 │   ├── alembic/             versioned migrations
 │   ├── requirements*.txt    pinned dependencies
@@ -45,13 +48,14 @@ MAXIMUS/
 │   │   ├── app/             App root, router, navigation model
 │   │   ├── components/      reusable UI + layout (Sidebar, Card, states)
 │   │   ├── features/        one folder per product area
+│   │   │   ├── auth/        AuthContext, guards, layouts, pages, validation
 │   │   │   ├── dashboard/   Dashboard + real service status card
 │   │   │   ├── settings/    environment/service/database/AI status
 │   │   │   └── shared/      honest placeholder + 404 pages
 │   │   ├── hooks/           useApiResource, useServiceHealth
-│   │   ├── lib/             api client, small utils
+│   │   ├── lib/             api client (CSRF-aware), small utils
 │   │   ├── styles/          Tailwind entry + design tokens
-│   │   ├── test/            Vitest setup
+│   │   ├── test/            Vitest setup + helpers
 │   │   └── types/           typed API contracts
 │   └── Dockerfile
 ├── docs/                    this documentation set
@@ -62,18 +66,27 @@ MAXIMUS/
 
 ## 3. Backend architecture
 
-- **Layering.** Routes stay thin; business logic belongs in `services/`
-  (introduced with the first real business feature). Data access is
-  encapsulated in ORM models and, later, repositories. AI orchestration will
-  live in `ai/`, planning logic in `planning/` (both Phase 4+).
+- **Layering.** Routes stay thin; business logic lives in `services/`
+  (`auth_service`). Data access is encapsulated in `repositories/` (user, session)
+  and ORM models. AI orchestration will live in `ai/`, planning logic in
+  `planning/` (both Phase 4+).
 - **App factory.** `app.main.create_app()` builds the `FastAPI` instance so
   tests can construct isolated apps and override dependencies.
 - **Configuration.** `app.core.config.Settings` (pydantic-settings) reads
   environment variables / `.env`. `get_settings()` is `lru_cache`d and used as
-  a FastAPI dependency. Database credentials are never hardcoded.
+  a FastAPI dependency. `SECRET_KEY` is required and validated (≥ 32 chars) — the
+  app refuses to start without it. Database credentials are never hardcoded.
 - **Database session.** A single engine plus `sessionmaker` in
   `app.db.session`; `get_session()` is the per-request FastAPI dependency.
   `pool_pre_ping=True` guards against stale connections.
+- **Authentication.** Opaque server-managed sessions: a random 256-bit token is
+  sent in an `HttpOnly` cookie and only its HMAC-SHA256 hash is stored
+  (`auth_sessions`). `api/deps.py` exposes `get_current_user`, which resolves the
+  cookie → session row → user and rejects expired/revoked sessions. Passwords are
+  hashed with Argon2id (`core/security.py`).
+- **Middleware.** CSRF double-submit (`core/csrf.py`), credential-enabled strict
+  CORS, and an in-process sliding-window rate limiter (`core/rate_limit.py`)
+  wrap the app.
 - **Migrations.** Alembic owns the schema. The backend container runs
   `alembic upgrade head` before starting. `create_all()` is used **only** in
   tests, never against a real database.
@@ -91,8 +104,14 @@ MAXIMUS/
 - **Rendering.** `App` → `BrowserRouter` → `AppRoutes`. `AppRoutes` is split out
   from the router so tests can render it under `MemoryRouter`.
 - **Data layer.** All HTTP goes through `src/lib/api.ts`, which centralises the
-  base URL, timeouts (`AbortController`), and error normalisation into
+  base URL, timeouts (`AbortController`), `credentials: 'include'`, the
+  `X-CSRF-Token` header on state-changing requests, and error normalisation into
   `ApiError`. Components never call `fetch` directly.
+- **Auth state.** `features/auth/AuthContext.tsx` is the single source of truth
+  for the signed-in user. It restores state on load by calling `GET /api/auth/me`
+  (which also bootstraps the CSRF cookie) and exposes `register`/`login`/`logout`.
+  `ProtectedRoute` redirects anonymous users to login; `PublicOnlyRoute` keeps
+  signed-in users out of the auth pages.
 - **Async state.** `useApiResource` exposes an explicit discriminated union
   (`loading | success | error`) plus `reload`, so every consumer handles all
   states. Loading, error (with retry) and empty states are real components.
@@ -109,18 +128,23 @@ MAXIMUS/
 | Decision | Rationale |
 | --- | --- |
 | UUID primary keys | Avoids enumeration, eases future sync/multi-device work. |
-| `users` table created in Phase 1 | It is the ownership root every later table references; creating it now with the initial migration avoids a throwaway baseline. No auth endpoints exist yet. |
+| `users` table created in Phase 1 | It is the ownership root every later table references; creating it now with the initial migration avoided a throwaway baseline. Auth endpoints landed in Phase 2. |
+| Opaque DB-backed sessions (not JWT) | Logout and revocation are immediate and server-authoritative; no token can outlive its row. The token never leaves the `HttpOnly` cookie. |
+| Store only an HMAC hash of the session token | A database leak does not yield usable session tokens. |
+| Double-submit CSRF with `SameSite=Lax` cookies | Cheap, stateless, and effective for a cookie-authenticated API without an extra double-submit store. |
+| Argon2id via `argon2-cffi` | Memory-hard, current best practice; parameter tuning left at library defaults. |
 | Tests run on SQLite | Fast, isolated, no external dependency. PostgreSQL behaviour (migrations, types) is verified against the real container separately. |
-| Vite dev-server `/api` proxy | Same-origin requests in development; CORS stays strict. |
+| Vite dev-server `/api` proxy | Same-origin requests in development; cookies work without CORS complexity. |
 | Recharts deferred to Phase 6 | No charts exist yet; avoid unused dependencies. |
 | No bind mounts in Compose | Predictable, reproducible startup; hot reload is available by running services locally. |
 | Frontend image is dev-only | Production static hosting/optimisation is a later-phase concern. |
 
-## 6. Deliberate limitations (Phase 1)
+## 6. Deliberate limitations
 
-- No authentication or authorization yet (Phase 2). The API exposes only
-  public health endpoints, so no user data is reachable.
+- Only authentication is implemented; no goals, planning, tracking, or AI yet
+  (Phase 3+). The API exposes health, auth, and profile endpoints only.
 - No AI provider integration (Phase 4). The Settings page states this plainly.
-- No business tables other than `users`.
+- Only the `users` and `auth_sessions` tables exist.
+- Rate limiting is in-process and per-instance (not shared across replicas).
 - The frontend Docker image runs the Vite dev server, not a hardened static
   server.

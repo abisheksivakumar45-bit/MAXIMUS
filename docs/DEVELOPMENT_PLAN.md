@@ -8,8 +8,8 @@ only marked complete when its completion criteria have been verified.
 | --- | --- | --- |
 | 0 | Project inspection and plan | ✅ Done |
 | 1 | Foundation | ✅ Done |
-| 2 | Authentication and profile | ⏳ Next |
-| 3 | Goals and onboarding | ⬜ Planned |
+| 2 | Authentication and profile | ✅ Done |
+| 3 | Goals and onboarding | ⏳ Next |
 | 4 | Roadmap engine | ⬜ Planned |
 | 5 | Weekly and daily planning | ⬜ Planned |
 | 6 | XP and progress | ⬜ Planned |
@@ -52,11 +52,35 @@ Verification (see `IMPLEMENTATION_STATUS.md` for the exact results):
 backend lint + tests, frontend typecheck + tests + build, Docker Compose stack
 startup, migration application, and live health-endpoint checks.
 
-## Phase 2 — Authentication and profile (next)
+## Phase 2 — Authentication and profile (complete)
 
-Registration, login, logout, secure sessions, protected routes, profile
-management, validation, and the authentication/authorization test suite.
-Requires a non-empty `SECRET_KEY`.
+Deliverables:
+
+- **Registration / login / logout / session restoration**: `POST
+  /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET
+  /api/auth/me`.
+- **Sessions**: opaque server-managed sessions stored in an `HttpOnly`,
+  `SameSite=Lax` cookie; only an HMAC-SHA256 hash persisted in `auth_sessions`.
+- **Password hashing**: Argon2id via `argon2-cffi`.
+- **CSRF**: double-submit token enforced on every state-changing method.
+- **Rate limiting**: sliding-window limiter on auth endpoints (429 on excess).
+- **Profile**: `GET /api/profile`, `PATCH /api/profile` (display name only;
+  email read-only), identity always derived from the session.
+- **Migration `0002`**: `auth_sessions` with FK `ON DELETE CASCADE` and unique
+  token-hash index (additive; no existing data touched).
+- **Frontend**: `AuthProvider`, protected/public route guards, Login,
+  Register, and Profile pages with accessible validation and password
+  visibility toggle; header/sidebar account block with logout.
+- **Configuration**: `SECRET_KEY` now mandatory (≥ 32 chars) and validated at
+  startup; `SESSION_LIFETIME_DAYS`, `COOKIE_SECURE`, and `AUTH_RATE_LIMIT_*`
+  added to `.env.example` and Compose.
+
+Verification (see `IMPLEMENTATION_STATUS.md` for the exact results): backend
+lint + 43 tests, frontend typecheck + 32 tests + build, migration applied to
+the live PostgreSQL, and live end-to-end checks of register/login/logout,
+CSRF, rate limiting, CORS, cookie flags, and Argon2id hashing.
+
+## Phase 3 — Goals and onboarding (next)
 
 ## Scope discipline
 
