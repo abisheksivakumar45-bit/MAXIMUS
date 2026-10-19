@@ -1,6 +1,6 @@
 # MAXIMUS — Implementation Status
 
-Last verified: **2026-10-18** · Phase: **2 — Authentication & Profile**
+Last verified: **2026-10-19** · Phase: **3 — Goals & Onboarding**
 Authoritative spec: [`MASTER_SPEC.md`](./MASTER_SPEC.md)
 
 This document records what is actually implemented and verified. Planned
@@ -75,19 +75,42 @@ features are never listed as done.
 | Frontend tests | ✅ 32 passed | `vitest run` — 8 files |
 | Lint / format / typecheck / build / audit | ✅ Clean | `ruff check`, `ruff format --check`, `tsc`, `vite build`, `npm audit` (0 vulns) |
 
+### Phase 3 — Goals & Onboarding
+
+| Area | Status | Evidence |
+| --- | --- | --- |
+| Canonical category taxonomy (`app/core/goal_categories.py`) | ✅ Verified | 8 slugs; `GET /api/goals/categories` serialises them; UI renders forms from the response (no drift possible) |
+| Goal CRUD (`GET/POST /api/goals`, `GET/PATCH/DELETE /api/goals/{id}`) | ✅ Verified | Live E2E: create 201, list 200, patch 200, delete 204, deleted → 404 |
+| Assessment validation per category | ✅ Verified | Unknown choice value → 422; missing required answer → 422; answers stored and returned |
+| Duplicate protection (name + category per user) | ✅ Verified | Same name+category → 409; different name in same category → allowed |
+| Per-user isolation | ✅ Verified | Cross-user GET/PATCH/DELETE all → 404 with the **identical** body to a missing id |
+| Onboarding save/resume (`PUT /api/onboarding` partial merge) | ✅ Verified | Partial saves merge; `current_step` persists; refresh resumes at the stored step |
+| Server-authoritative completion gate | ✅ Verified | Early `completed: true` → 400 `"Onboarding still needs …"`; completion only after required answers |
+| Draft-goal lifecycle | ✅ Verified | Onboarding creates `draft` goals; completion activates them in the same transaction; partial saves keep them draft |
+| Migration `0003` (goals, goal_assessments, user_onboarding) | ✅ Verified | Applied to live PostgreSQL; Phase 1/2 data preserved; upgrade + downgrade tested in pytest |
+| Multi-step onboarding wizard | ✅ Verified | Welcome → profile → lifestyle → goals → assessment → review; progress indicator; Back/Continue; data preserved across steps |
+| Client-side validation mirroring the server | ✅ Verified | Required, max-length, choice membership, 24-hour time pattern; server remains the authority |
+| Goals page (create/edit/delete, status controls) | ✅ Verified | Two-step delete confirm; category locked once answered (documented limitation); quick pause/resume/complete |
+| Dashboard goals summary | ✅ Verified | Active goal count, names/categories, assessment status, resume-onboarding CTA when incomplete |
+| Auth redirects through onboarding | ✅ Verified | Register → `/onboarding`; login → `/onboarding` when incomplete, else requested page |
+| Backend tests | ✅ 87 passed | `pytest` (see §4) — incl. a production-lifecycle regression test |
+| Frontend tests | ✅ 68 passed | `vitest run` — 11 files |
+| Lint / format / typecheck / build / audit | ✅ Clean | `ruff check`, `ruff format --check`, `tsc`, `vite build`, `npm audit` (0 vulns) |
+
 ---
 
 ## 3. Not implemented (honestly unavailable)
 
 The following are **not** built and are labelled as such in the UI. They belong
-to later phases per the master specification: goals & onboarding (3), roadmap
-engine & AI provider (4), weekly/daily planning (5), XP/levels/streaks/
-achievements & analytics (6), nutrition & fitness (7), academics &
-cybersecurity (8), sleep & habits (9), AI coach (10), adaptive planning (11).
+to later phases per the master specification: roadmap engine & AI provider (4),
+weekly/daily planning (5), XP/levels/streaks/achievements & analytics (6),
+nutrition & fitness (7), academics & cybersecurity (8), sleep & habits (9), AI
+coach (10), adaptive planning (11).
 
 There is **no** mock data, **no** fake API responses, **no** invented charts,
-and **no** XP or progress values anywhere. Authentication is real, but business
-tables other than `users` and `auth_sessions` do not exist yet.
+and **no** XP or progress values anywhere. The only business tables are the
+Phase 3 set (`goals`, `goal_assessments`, `user_onboarding`) plus Phase 1/2
+(`users`, `auth_sessions`).
 
 ---
 
@@ -97,99 +120,85 @@ tables other than `users` and `auth_sessions` do not exist yet.
 
 ```
 ..\.venv\Scripts\python.exe -m pytest
-  → 43 passed, 1 warning (third-party Starlette httpx deprecation only)
+  → 87 passed, 1 warning (third-party Starlette httpx deprecation only)
 
 ..\.venv\Scripts\python.exe -m ruff check .
   → All checks passed!
 
 ..\.venv\Scripts\python.exe -m ruff format --check .
-  → 41 files already formatted
+  → 55 files already formatted
 ```
 
 Test inventory: health endpoints (service info, liveness without DB, readiness
 200, readiness 503 on DB error), model round-trip, unique-email constraint,
 schema validation, **migration upgrade/downgrade run against a real Alembic
-environment**, plus the Phase 2 suites: registration (success, duplicate,
-invalid, hash-not-plaintext), login/session (success, wrong credentials,
-restoration, logout invalidation, unauthenticated rejection), profile
-(retrieve, valid/invalid update, per-user isolation), and security (input
-validation, no hash in responses, rate limiting, CSRF enforcement).
+environment**, the Phase 2 suites (registration, login/session, profile,
+security), and the Phase 3 suites: goal categories (canonical set, public
+access, required flags, text limits), goal CRUD (create with/without
+assessment, list, get, patch, delete, duplicates, invalid answers),
+per-user isolation (identical 404 for missing vs. other-user), onboarding
+(partial merge, resume, validation, completion gate, draft activation),
+and a **production-lifecycle regression test** that gives each request its
+own short-lived session (see §5).
 
 ### Frontend (`frontend/`)
 
 ```
-npm run typecheck   → no errors (TypeScript strict)
-npm test            → Test Files 8 passed (8); Tests 32 passed (32)
-npm run build       → built successfully (tsc + vite build)
-npm audit           → found 0 vulnerabilities
+npx tsc --noEmit   → no errors (TypeScript strict)
+npx vitest run     → Test Files 11 passed (11); Tests 68 passed (68)
+npx vite build     → built successfully
+npm audit          → found 0 vulnerabilities
 ```
 
-Frontend test inventory: API client (method/body/CSRF header/error handling),
-validation, `AuthContext` (restore/register/login/logout), route guards, the
-login page, and the profile page.
+Frontend test inventory: API client (method/body/CSRF header/error handling,
+goals & onboarding namespaces), validation, `AuthContext`, route guards,
+login page (incl. onboarding redirect), profile page, Sidebar, Dashboard
+(goals summary, resume-onboarding CTA), Goals page (CRUD, delete confirm,
+status controls, validation preservation), Onboarding wizard (resume,
+validation, step navigation, data preservation, goal select/deselect,
+assessment validation, completion gate, loading/error/retry, duplicate-submit
+prevention), and route-level protection for `/goals` and `/onboarding`.
 
-### Phase 2 live verification (Docker Compose, PostgreSQL)
-
-```
-docker compose build backend frontend      → exit 0
-docker compose up -d backend frontend      → exit 0; backend healthy
-docker compose exec -T backend alembic current   → 0002 (head)
-docker compose exec -T db psql ... -c "\d auth_sessions"
-  → uuid/timestamptz/varchar(64) columns, now() default,
-    unique btree(token_hash), btree(user_id), btree(expires_at),
-    FK user_id → users(id) ON DELETE CASCADE
-
-GET  /api/auth/me (anonymous)                     → 401 + Set-Cookie maximus_csrf
-POST /api/auth/register (no X-CSRF-Token)         → 403 "CSRF validation failed"
-POST /api/auth/register (valid)                   → 201 + HttpOnly maximus_session cookie
-GET  /api/auth/me (session)                       → 200 (user only; no hash)
-GET  /api/profile                                 → 200
-PATCH /api/profile (with CSRF)                    → 200, display_name updated
-PATCH /api/profile (no CSRF)                      → 403
-POST /api/auth/logout (with CSRF)                 → 200 "Logged out"
-GET  /api/auth/me (after logout)                  → 401
-POST /api/auth/login (correct)                    → 200 + session cookie
-POST /api/auth/login (wrong password)             → 401 "Invalid email or password."
-POST /api/auth/login (unknown email)              → 401 "Invalid email or password."  (identical)
-POST /api/auth/register x10 then x11              → processed, then 429 rate limited
-CORS  Origin: http://localhost:5183               → access-control-allow-origin echoed, credentials true
-CORS  Origin: http://evil.example.com             → no access-control-allow-origin
-GET  http://localhost:5183/api/health             → 200 (Vite proxy → backend)
-
-DB assertions:
-  users.password_hash      → `$argon2id$…` (length 97); 0 rows contain the plaintext
-  auth_sessions.token_hash → 64-char HMAC hash; revoked session flagged revoked_at
-```
-
-> API docs and the interactive Swagger UI are disabled when `APP_ENV=production`.
-
-### Docker Compose (project root)
+### Phase 3 live verification (Docker Compose, PostgreSQL)
 
 ```
-docker compose up --build -d       → exit code 0
-docker compose ps                  → db (healthy), backend (healthy), frontend (up)
-docker compose exec -T backend alembic current        → 0002 (head)
-docker compose exec -T db psql ... -c "\dt"           → alembic_version, users, auth_sessions
-GET http://localhost:8010/api/health        → 200 {service:MAXIMUS, version:0.1.0, ...}
-GET http://localhost:8010/api/health/live   → 200 {status:alive}
-GET http://localhost:8010/api/health/ready  → 200 {status:ready, database.connected:true}
-GET http://localhost:5183/                  → 200 HTML (<title>MAXIMUS</title>)
-GET http://localhost:5183/api/health        → 200 (Vite proxy → backend)
+docker compose config --quiet            → exit 0
+docker compose up -d --build backend frontend → exit 0; backend healthy
+docker compose exec backend alembic current    → 0003 (head)
+docker compose exec backend alembic history    → 0001 → 0002 → 0003
+psql \dt  → alembic_version, users, auth_sessions,
+            goals, goal_assessments, user_onboarding
+psql counts: users=4, auth_sessions=5 (Phase 1/2 dev data preserved)
+GET  /api/health, /api/health/ready        → 200, database connected
+GET  http://localhost:5183/{,/goals,/onboarding} → 200 (SPA fallback)
 ```
 
-Failure-path checks (live):
+End-to-end journey via API (24/24 checks, throwaway accounts):
 
 ```
-docker compose stop db  → GET /api/health/ready → 503 ; GET /api/health/live → 200
-docker compose start db → GET /api/health/ready → 200 (recovered)
+GET  /api/auth/me (anonymous)        → 401 + CSRF cookie issued
+POST /api/auth/register              → 201 + session
+GET  /api/onboarding                 → incomplete; missing: timezone,
+                                       daily availability, ≥1 goal
+GET  /api/goals/categories           → 8 canonical categories
+PUT  /api/onboarding (partial)       → 200, merge verified
+PUT  completed early                 → 400 "Onboarding still needs …"
+POST /api/goals (valid assessment)   → 201, status=draft
+POST /api/goals (same name+category) → 409
+POST /api/goals (unknown choice)     → 422
+POST /api/goals (missing required)   → 422
+GET/PATCH/DELETE cross-user goal     → 404, body identical to missing id
+PUT  completed (all requirements)    → 200, completed_at set
+GET  /api/goals/{id}                 → status=active (drafts activated),
+                                       assessment answers preserved
+PATCH status                         → 200
+DELETE                               → 204; then GET → 404
+GET  /api/onboarding after complete  → readable + editable
 ```
 
-Persistence check:
-
-```
-INSERT a row → docker compose down → docker compose up -d → row still present
-(server default is_active = true confirmed). Test row then deleted.
-```
+Backend log scan for the run: no tracebacks, no 5xx; the only 404s are the
+deliberate cross-user isolation probes. `.env` never printed or modified;
+`docker compose down -v` never used; dev accounts left intact.
 
 > Note: in PowerShell, `docker compose up -d` prints progress to **stderr**, so
 > the console shows a red `NativeCommandError` even though the command exits
@@ -199,6 +208,36 @@ INSERT a row → docker compose down → docker compose up -d → row still pres
 
 ## 5. Defects found and fixed during verification
 
+- **`create_goal` never committed its transaction** (Phase 3): the goal
+  service flushed new goals but did not `commit()`, and the production session
+  dependency closes (and thereby rolls back) the session at the end of every
+  request. Every goal created through the API was silently discarded: the
+  create returned 201, but the goal was invisible to all later requests —
+  breaking duplicate detection (409 never fired), onboarding completion
+  ("still needs at least one goal"), and the goals list.
+  - Not caught by the existing pytest suite because its shared test session
+    keeps one open transaction per test, so flushed rows stayed visible.
+  - Found by an end-to-end API journey against the live Docker stack, which
+    uses real per-request sessions.
+  - Fixed by adding the missing `self._session.commit()` (now consistent with
+    every other write path in the services).
+  - Added `test_goals_and_onboarding_persist_across_request_scoped_sessions`,
+    which reproduces the production lifecycle (one short-lived session per
+    request, closed without commit) on an isolated engine; verified it fails
+    without the fix and passes with it.
+- **Onboarding wizard state clobbered mid-flow** (Phase 3): `loadInitial`'s
+  callback depended on `user.display_name`, so saving the profile step (which
+  updates the user) re-ran the full wizard load and discarded in-progress
+  step/answers/selection while racing the save request.
+  - Fixed by decoupling the load from the user object (separate one-time seed
+    effect for the display name) and gating the load on the resolved auth
+    status.
+- **Freshly selected goal had no stored name** (Phase 3): the goals step
+  displayed the category label as the default goal name but never wrote it
+  into state, so Continue either errored ("Every goal needs a name.") or read
+  `undefined` and crashed.
+  - Fixed by seeding `goalNames[slug]` with the category label when a category
+    is toggled on.
 - **Migration `0001` had a `SyntaxError`** (Phase 1): `sa.sql.expression.true()`
   was passed positionally after keyword arguments, so `alembic upgrade head`
   failed inside Docker. It was not caught by the earlier test run because tests
@@ -224,9 +263,16 @@ INSERT a row → docker compose down → docker compose up -d → row still pres
 
 ## 6. Known limitations
 
-- No product features beyond authentication: goals, roadmaps, planning,
-  nutrition, fitness, coaching, etc. are Phase 3+ and are labelled honestly.
+- No product features beyond goals/onboarding: roadmaps, planning, nutrition,
+  fitness, coaching, etc. are Phase 4+ and are labelled honestly.
 - No AI provider (Phase 4). The Settings page states this explicitly.
+- A goal's **category cannot be changed after its assessment is answered**
+  (the edit form locks the field with a hint). The stored answers belong to
+  the old category's question set; the safe path is to delete the goal and
+  create one in the new category. Category is editable while unanswered.
+- Onboarding's lifestyle questions are saved but no phase yet acts on them
+  (the roadmap engine is Phase 4); the review step shows them truthfully as
+  "used to shape your roadmap when it is built".
 - The frontend container runs the Vite **development** server; it is not a
   hardened production static server. Code changes require a rebuild
   (`docker compose up --build`) unless services are run locally.
@@ -283,6 +329,6 @@ docker compose down -v           # DELETES the database volume
 
 ## 9. Recommended next phase
 
-**Phase 3 — Goals & onboarding** per `docs/DEVELOPMENT_PLAN.md`: the first
-user-owned business data, built on the authentication and per-user access
-introduced in Phase 2.
+**Phase 4 — Roadmap engine & AI provider** per `docs/DEVELOPMENT_PLAN.md`:
+turning the goals and onboarding answers collected in Phase 3 into real
+roadmaps, behind a provider interface with an honest "not configured" state.

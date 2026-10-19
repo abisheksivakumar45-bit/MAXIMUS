@@ -72,3 +72,75 @@ describe('api request behaviour', () => {
     expect((error as ApiError).message).toBe('Password is too short.');
   });
 });
+
+describe('api goals and onboarding', () => {
+  it('fetches the category catalogue with a plain GET', async () => {
+    const { requests } = stubFetch(() =>
+      jsonResponse([{ slug: 'custom', label: 'Custom goal', description: '', assessment: [] }]),
+    );
+
+    const categories = await api.goals.categories();
+
+    expect(requests[0].url).toBe('/api/goals/categories');
+    expect(requests[0].init?.method).toBe('GET');
+    expect(categories[0].slug).toBe('custom');
+  });
+
+  it('creates a goal with method, CSRF header and payload', async () => {
+    setCookie('maximus_csrf', 'csrf-token-123');
+    const { requests } = stubFetch(() =>
+      jsonResponse({ id: 'g1', name: 'Sleep earlier', category: 'sleep-consistency' }),
+    );
+
+    await api.goals.create({ name: 'Sleep earlier', category: 'sleep-consistency', status: 'draft' });
+
+    const [request] = requests;
+    expect(request.url).toBe('/api/goals');
+    expect(request.init?.method).toBe('POST');
+    expect(request.init?.credentials).toBe('include');
+    const headers = request.init?.headers as Record<string, string>;
+    expect(headers['X-CSRF-Token']).toBe('csrf-token-123');
+    const body = JSON.parse(String(request.init?.body)) as Record<string, unknown>;
+    expect(body).toMatchObject({ name: 'Sleep earlier', category: 'sleep-consistency', status: 'draft' });
+  });
+
+  it('patches and deletes a goal by id', async () => {
+    const { requests } = stubFetch(({ init }) =>
+      init?.method === 'DELETE' ? new Response(null, { status: 204 }) : jsonResponse({ id: 'g1' }),
+    );
+
+    await api.goals.update('g1', { status: 'paused' });
+    await api.goals.remove('g1');
+
+    expect(requests[0].url).toBe('/api/goals/g1');
+    expect(requests[0].init?.method).toBe('PATCH');
+    expect(requests[1].url).toBe('/api/goals/g1');
+    expect(requests[1].init?.method).toBe('DELETE');
+  });
+
+  it('surfaces the server completion gate for onboarding saves', async () => {
+    stubFetch(() =>
+      jsonResponse({ detail: 'Onboarding still needs your time zone.' }, 400),
+    );
+
+    await expect(api.onboarding.save({ completed: true })).rejects.toMatchObject({
+      status: 400,
+      message: 'Onboarding still needs your time zone.',
+    });
+  });
+
+  it('saves onboarding progress with a PUT carrying the CSRF header', async () => {
+    setCookie('maximus_csrf', 'csrf-token-123');
+    const { requests } = stubFetch(() => jsonResponse({ completed_at: null, missing: [] }));
+
+    await api.onboarding.save({ current_step: 'lifestyle' });
+
+    const [request] = requests;
+    expect(request.url).toBe('/api/onboarding');
+    expect(request.init?.method).toBe('PUT');
+    const headers = request.init?.headers as Record<string, string>;
+    expect(headers['X-CSRF-Token']).toBe('csrf-token-123');
+    const body = JSON.parse(String(request.init?.body)) as Record<string, unknown>;
+    expect(body).toEqual({ current_step: 'lifestyle' });
+  });
+});

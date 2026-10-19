@@ -14,6 +14,7 @@ function renderLogin() {
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<div>Dashboard home</div>} />
+          <Route path="/onboarding" element={<div>Onboarding destination</div>} />
         </Routes>
       </AuthProvider>
     </MemoryRouter>,
@@ -67,6 +68,60 @@ describe('LoginPage', () => {
     expect((loginRequest?.init?.headers as Record<string, string>)['X-CSRF-Token']).toBe(
       'csrf-token-123',
     );
+  });
+
+  it('sends the user to onboarding when setup is unfinished', async () => {
+    setCookie('maximus_csrf', 'csrf-token-123');
+    stubFetch(({ url }) => {
+      if (url === '/api/auth/login') {
+        return jsonResponse({
+          id: 'u1',
+          email: 'ada@example.com',
+          display_name: 'Ada',
+          created_at: '2026-01-01T00:00:00Z',
+        });
+      }
+      if (url === '/api/onboarding') {
+        return jsonResponse({ completed_at: null, missing: ['your time zone'] });
+      }
+      return jsonResponse({ detail: 'Not found' }, 404);
+    });
+
+    renderLogin();
+    await waitFor(() => expect(screen.getByLabelText('Email')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'TestPassword123');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('Onboarding destination')).toBeInTheDocument();
+  });
+
+  it('keeps the requested destination when onboarding is already complete', async () => {
+    setCookie('maximus_csrf', 'csrf-token-123');
+    stubFetch(({ url }) => {
+      if (url === '/api/auth/login') {
+        return jsonResponse({
+          id: 'u1',
+          email: 'ada@example.com',
+          display_name: 'Ada',
+          created_at: '2026-01-01T00:00:00Z',
+        });
+      }
+      if (url === '/api/onboarding') {
+        return jsonResponse({ completed_at: '2026-10-16T09:00:00Z', missing: [] });
+      }
+      return jsonResponse({ detail: 'Not found' }, 404);
+    });
+
+    renderLogin();
+    await waitFor(() => expect(screen.getByLabelText('Email')).toBeInTheDocument());
+
+    await userEvent.type(screen.getByLabelText('Email'), 'ada@example.com');
+    await userEvent.type(screen.getByLabelText('Password'), 'TestPassword123');
+    await userEvent.click(screen.getByRole('button', { name: /sign in/i }));
+
+    expect(await screen.findByText('Dashboard home')).toBeInTheDocument();
   });
 
   it('surfaces a backend error such as invalid credentials', async () => {

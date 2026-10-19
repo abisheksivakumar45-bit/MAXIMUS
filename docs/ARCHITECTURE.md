@@ -141,10 +141,11 @@ MAXIMUS/
 
 ## 6. Deliberate limitations
 
-- Only authentication is implemented; no goals, planning, tracking, or AI yet
-  (Phase 3+). The API exposes health, auth, and profile endpoints only.
+- Implemented so far: authentication, profile, goals, and onboarding. Roadmaps,
+  planning, tracking, and AI are Phase 4+. The API exposes health, auth,
+  profile, goals, and onboarding endpoints only.
 - No AI provider integration (Phase 4). The Settings page states this plainly.
-- Only the `users` and `auth_sessions` tables exist.
+- Roadmaps, daily tasks, XP, and the other Phase 4+ tables do not exist.
 - Rate limiting is in-process and per-instance (not shared across replicas).
 - The frontend Docker image runs the Vite dev server, not a hardened static
   server.

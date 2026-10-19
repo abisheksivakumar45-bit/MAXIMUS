@@ -5,6 +5,13 @@ import type {
   ProfileUpdatePayload,
   RegisterPayload,
 } from '../types/auth';
+import type {
+  Goal,
+  GoalCategory,
+  GoalCreatePayload,
+  GoalUpdatePayload,
+} from '../types/goal';
+import type { OnboardingSavePayload, OnboardingState } from '../types/onboarding';
 
 /**
  * Base URL of the MAXIMUS API.
@@ -144,5 +151,28 @@ export const api = {
     /** Update the current user's profile. */
     update: (payload: ProfileUpdatePayload) =>
       request<AuthUser>('/api/profile', { method: 'PATCH', body: payload }),
+  },
+
+  goals: {
+    /** The canonical goal categories and their assessment questions (public). */
+    categories: () => request<GoalCategory[]>('/api/goals/categories'),
+    /** List the current user's goals. */
+    list: () => request<Goal[]>('/api/goals'),
+    /** Create a goal for the current user. */
+    create: (payload: GoalCreatePayload) =>
+      request<Goal>('/api/goals', { method: 'POST', body: payload }),
+    /** Update one of the current user's goals (and/or its assessment). */
+    update: (goalId: string, payload: GoalUpdatePayload) =>
+      request<Goal>(`/api/goals/${goalId}`, { method: 'PATCH', body: payload }),
+    /** Delete one of the current user's goals. */
+    remove: (goalId: string) => request<void>(`/api/goals/${goalId}`, { method: 'DELETE' }),
+  },
+
+  onboarding: {
+    /** Fetch the current user's onboarding state (resumable). */
+    get: () => request<OnboardingState>('/api/onboarding'),
+    /** Save onboarding progress; `completed: true` is validated server-side. */
+    save: (payload: OnboardingSavePayload) =>
+      request<OnboardingState>('/api/onboarding', { method: 'PUT', body: payload }),
   },
 };

@@ -75,3 +75,35 @@ def update_profile(client: TestClient, *, display_name: str) -> Response:
         json={"display_name": display_name},
         headers=csrf_headers(client),
     )
+
+
+# -- goals -------------------------------------------------------------------
+def create_goal(client: TestClient, **fields) -> Response:
+    """Create a goal for the current user (CSRF handshake assumed done)."""
+    payload = {"name": "My goal", "category": "custom", **fields}
+    return client.post("/api/goals", json=payload, headers=csrf_headers(client))
+
+
+def create_second_client(db_session, **settings_overrides) -> TestClient:
+    """Build a second independent client sharing the same test database."""
+    from app.core.config import Settings
+    from app.db.session import get_session
+    from app.main import create_app
+
+    settings = Settings(**settings_overrides)
+    application = create_app(settings)
+
+    def _dependency():
+        yield db_session
+
+    application.dependency_overrides[get_session] = _dependency
+    return TestClient(application)
+
+
+def save_onboarding(client: TestClient, **fields) -> Response:
+    """PUT onboarding progress for the current user."""
+    return client.put(
+        "/api/onboarding",
+        json=fields,
+        headers=csrf_headers(client),
+    )

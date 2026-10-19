@@ -3,7 +3,7 @@
 Security is implemented incrementally. This document records the current
 posture honestly and the controls each phase adds.
 
-## 1. Current posture (Phase 2)
+## 1. Current posture (Phase 3)
 
 - **Authentication.** Users register and log in with an email + password. The
   password is hashed with **Argon2id** (`argon2-cffi`, secure defaults). Login
@@ -54,7 +54,7 @@ posture honestly and the controls each phase adds.
 
 | Phase | Control |
 | --- | --- |
-| 3+ | Continued per-user authorization on every new user-owned table (`WHERE user_id = :current_user`). |
+| 4+ | Continued per-user authorization on every new user-owned table (`WHERE user_id = :current_user`). |
 | 8 | Practical security learning occurs only in legal, authorised environments. |
 | 12 | Full security review: authorization tests (cross-user access), API input fuzzing, dependency and configuration audit. |
 
@@ -63,6 +63,14 @@ hashing, opaque server-managed sessions, protected routes with identity derived
 from the validated session, request validation, login rate limiting, user-data
 isolation, a mandatory validated `SECRET_KEY`, and a finalised CSRF strategy
 (double-submit).
+
+Phase 3 extended those controls to the first business data: every goals and
+onboarding route derives the owner from the session (never from client input),
+the repository layer has no "get by id alone" helper so scoping cannot be
+forgotten, cross-user reads/writes return a 404 identical to a missing record
+(no id probing), assessment answers are validated server-side (choices,
+required fields, length limits), and goal creation is protected by a database
+uniqueness constraint in addition to the application check.
 
 ## 3. Standing rules
 

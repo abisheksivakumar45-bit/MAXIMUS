@@ -6,7 +6,7 @@ import { Alert } from '../../components/ui/Alert';
 import { Button } from '../../components/ui/Button';
 import { PasswordField } from '../../components/ui/PasswordField';
 import { TextField } from '../../components/ui/TextField';
-import { ApiError } from '../../lib/api';
+import { ApiError, api } from '../../lib/api';
 import { useAuth } from './AuthContext';
 import { validateEmail } from './validation';
 
@@ -44,7 +44,19 @@ export function LoginPage() {
     setSubmitting(true);
     try {
       await login({ email: email.trim(), password });
-      navigate(redirectTo, { replace: true });
+      // Continue onboarding when it is unfinished (the spec journey starts
+      // with it); otherwise honour the requested destination. A failure while
+      // checking is non-fatal — the dashboard offers a resume path too.
+      let destination = redirectTo;
+      try {
+        const onboarding = await api.onboarding.get();
+        if (onboarding.completed_at === null) {
+          destination = '/onboarding';
+        }
+      } catch {
+        // Keep the default destination; the dashboard reports the error state.
+      }
+      navigate(destination, { replace: true });
     } catch (error) {
       setFormError(
         error instanceof ApiError ? error.message : 'Unable to sign in. Please try again.',

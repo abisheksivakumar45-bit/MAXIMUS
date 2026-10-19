@@ -9,6 +9,8 @@ import { ProtectedRoute } from '../features/auth/ProtectedRoute';
 import { PublicOnlyRoute } from '../features/auth/PublicOnlyRoute';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
+import { GoalsPage } from '../features/goals/GoalsPage';
+import { OnboardingPage } from '../features/onboarding/OnboardingPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { NotFoundPage } from '../features/shared/NotFoundPage';
 import { PlaceholderPage } from '../features/shared/PlaceholderPage';
@@ -38,6 +40,8 @@ export function AppRoutes() {
         <Route path="/" element={<AppLayout />}>
           <Route index element={<DashboardPage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="goals" element={<GoalsPage />} />
+          <Route path="onboarding" element={<OnboardingPage />} />
           {plannedItems.map((item) => (
             <Route
               key={item.path}

@@ -1,6 +1,7 @@
 import { Card, CardHeader } from '../../components/ui/Card';
 import { EmptyState } from '../../components/ui/EmptyState';
 import { PageHeader } from '../../components/ui/PageHeader';
+import { GoalsSummaryCard } from './GoalsSummaryCard';
 import { ServiceStatusCard } from './ServiceStatusCard';
 
 function greetingForHour(hour: number): string {
@@ -11,7 +12,7 @@ function greetingForHour(hour: number): string {
   return 'Good night';
 }
 
-/** Dashboard / Today. Phase 1 renders the shell and real service status. */
+/** Dashboard / Today. Real service status plus the goal summary (Phase 3). */
 export function DashboardPage() {
   const now = new Date();
   const dateLabel = now.toLocaleDateString(undefined, {
@@ -40,17 +41,7 @@ export function DashboardPage() {
           />
         </Card>
 
-        <Card>
-          <CardHeader
-            title="Goals & progress"
-            description="Active goals, levels, streaks, and earned XP."
-          />
-          <EmptyState
-            title="No goals yet"
-            description="Goal creation arrives in Phase 3 and XP, levels, and streaks in Phase 6. These values will be computed by the backend from persisted records."
-            hint="No placeholder statistics are shown."
-          />
-        </Card>
+        <GoalsSummaryCard />
       </div>
     </div>
   );

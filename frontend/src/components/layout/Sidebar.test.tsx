@@ -15,7 +15,8 @@ describe('Sidebar', () => {
     const links = within(primaryNav).getAllByRole('link');
 
     // Dashboard + Settings are implemented; every other section is a planned
-    // route rendered by the honest placeholder page.
+    // route rendered by the honest placeholder page (Goals became real in
+    // Phase 3).
     expect(within(primaryNav).getByRole('link', { name: /dashboard/i })).toHaveAttribute(
       'href',
       '/',
@@ -39,8 +40,11 @@ describe('Sidebar', () => {
     );
 
     const primaryNav = screen.getByRole('navigation', { name: /primary/i });
-    // Planned items carry the "soon" marker; Dashboard/Settings do not.
+    // Planned items carry the "soon" marker; implemented ones (Goals since
+    // Phase 3) do not.
     const goalsLink = within(primaryNav).getByRole('link', { name: /goals/i });
-    expect(within(goalsLink).getByText('soon')).toBeInTheDocument();
+    expect(within(goalsLink).queryByText('soon')).not.toBeInTheDocument();
+    const roadmapsLink = within(primaryNav).getByRole('link', { name: /roadmaps/i });
+    expect(within(roadmapsLink).getByText('soon')).toBeInTheDocument();
   });
 });

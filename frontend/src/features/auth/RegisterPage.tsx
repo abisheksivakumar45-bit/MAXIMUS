@@ -53,7 +53,8 @@ export function RegisterPage() {
     setSubmitting(true);
     try {
       await register({ display_name: displayName.trim(), email: email.trim(), password });
-      navigate('/', { replace: true });
+      // A brand-new account always needs onboarding before it has any goals.
+      navigate('/onboarding', { replace: true });
     } catch (error) {
       setFormError(
         error instanceof ApiError ? error.message : 'Unable to create your account.',

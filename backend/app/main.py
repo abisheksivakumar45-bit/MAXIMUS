@@ -9,7 +9,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 
-from app.api.routes import auth, health, profile
+from app.api.routes import auth, goals, health, onboarding, profile
 from app.core.config import Settings, get_settings
 from app.core.csrf import CsrfMiddleware
 from app.core.logging import configure_logging
@@ -38,7 +38,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=settings.app_version,
         description=(
             "MAXIMUS — AI-powered personal growth and life-management platform. "
-            "Phase 2: cookie-based authentication, sessions, and user profiles."
+            "Phase 3: goal management and onboarding."
         ),
         docs_url="/api/docs" if settings.app_env != "production" else None,
         redoc_url=None,
@@ -85,6 +85,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(health.router, prefix=settings.api_v1_prefix)
     application.include_router(auth.router, prefix=settings.api_v1_prefix)
     application.include_router(profile.router, prefix=settings.api_v1_prefix)
+    application.include_router(goals.router, prefix=settings.api_v1_prefix)
+    application.include_router(onboarding.router, prefix=settings.api_v1_prefix)
 
     @application.get("/", include_in_schema=False)
     async def root() -> dict[str, str]:

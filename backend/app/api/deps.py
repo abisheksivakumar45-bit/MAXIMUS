@@ -12,6 +12,8 @@ from app.core.rate_limit import SlidingWindowRateLimiter
 from app.db.session import get_session
 from app.models.user import User
 from app.services.auth_service import AuthService
+from app.services.goal_service import GoalService
+from app.services.onboarding_service import OnboardingService
 
 
 def get_auth_service(
@@ -20,6 +22,16 @@ def get_auth_service(
 ) -> AuthService:
     """Build the authentication service for the current request."""
     return AuthService(session, settings)
+
+
+def get_goal_service(session: Session = Depends(get_session)) -> GoalService:
+    """Build the goal service for the current request."""
+    return GoalService(session)
+
+
+def get_onboarding_service(session: Session = Depends(get_session)) -> OnboardingService:
+    """Build the onboarding service for the current request."""
+    return OnboardingService(session)
 
 
 def _unauthorized() -> HTTPException:

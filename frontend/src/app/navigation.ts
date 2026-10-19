@@ -48,8 +48,8 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Goals',
         path: '/goals',
         phase: 3,
-        implemented: false,
-        description: 'Define goals, reviews, and assessments.',
+        implemented: true,
+        description: 'Create, assess, review, and manage your goals.',
       },
       {
         label: 'Roadmaps',

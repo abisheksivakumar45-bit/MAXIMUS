@@ -4,13 +4,15 @@ MAXIMUS is an AI-powered personal growth and life-management web application.
 It is designed to turn personal ambitions into structured roadmaps, realistic
 daily plans, measurable actions, and continuous improvement.
 
-> **Development status: Phase 2 — Authentication & Profile.**
+> **Development status: Phase 3 — Goals & Onboarding.**
 > The application shell, backend, PostgreSQL database, migrations, health
-> endpoints, local development stack, and **authentication + user profile**
-> (registration, login, logout, server-managed sessions, CSRF protection,
-> protected routes, profile view/edit) are implemented and verified. Later
-> product features (goals, roadmaps, planning, nutrition, fitness, AI coaching,
-> …) are **not** implemented yet and are labelled honestly in the UI.
+> endpoints, local development stack, **authentication + user profile**, and
+> **goal management with onboarding** (canonical goal categories, per-category
+> assessment questions, goal CRUD with per-user isolation, a multi-step
+> onboarding wizard that is resumable and server-validated, draft goals that
+> activate on completion) are implemented and verified. Later product features
+> (roadmaps, planning, nutrition, fitness, AI coaching, …) are **not**
+> implemented yet and are labelled honestly in the UI.
 > See [`docs/IMPLEMENTATION_STATUS.md`](docs/IMPLEMENTATION_STATUS.md).
 
 The authoritative product specification is [`docs/MASTER_SPEC.md`](docs/MASTER_SPEC.md).
@@ -180,6 +182,14 @@ npm run build       # production build
 | `GET` | `/api/auth/me` | Return the authenticated user (used to restore auth state on load). |
 | `GET` | `/api/profile` | Return the authenticated user's profile. |
 | `PATCH` | `/api/profile` | Update the authenticated user's display name. |
+| `GET` | `/api/goals/categories` | The canonical goal categories and their assessment questions (public reference data). |
+| `GET` | `/api/goals` | List the current user's goals (with assessment status). |
+| `POST` | `/api/goals` | Create a goal (optionally with assessment answers). Duplicate name+category → 409. |
+| `GET` | `/api/goals/{id}` | Get one of the current user's goals (404 for missing or other users' goals, identical response). |
+| `PATCH` | `/api/goals/{id}` | Update a goal and/or merge assessment answers. |
+| `DELETE` | `/api/goals/{id}` | Delete a goal (204). |
+| `GET` | `/api/onboarding` | Current onboarding progress: saved answers, option lists, and what is still missing. |
+| `PUT` | `/api/onboarding` | Partially save onboarding progress (each save merges). `completed: true` is validated server-side; it only succeeds once every required answer exists. |
 | `GET` | `/api/docs` | Interactive OpenAPI docs (disabled when `APP_ENV=production`). |
 
 Authentication uses an **opaque, server-managed session** stored in an
