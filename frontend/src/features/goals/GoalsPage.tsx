@@ -284,7 +284,7 @@ export function GoalsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         title="Goals"
-        description={`${activeCount} active · ${goals.length} total. Goals, milestones, and AI roadmaps arrive across Phases 3–4.`}
+        description={`${activeCount} active · ${goals.length} total. Active goals can be turned into AI-generated roadmaps.`}
         action={
           editing === null ? (
             <Button onClick={startCreate}>Add goal</Button>
@@ -471,7 +471,7 @@ export function GoalsPage() {
         <EmptyState
           title="No goals yet"
           description="Add a goal to start turning an ambition into a plan. Goals you create are stored on the server and appear on your dashboard."
-          hint="Roadmaps, weekly plans, and daily tasks build on these goals in later phases."
+          hint="Generate a roadmap for an active goal from the Roadmaps page. Weekly plans and daily tasks follow in Phase 5."
         />
       ) : (
         <ul className="flex flex-col gap-4">

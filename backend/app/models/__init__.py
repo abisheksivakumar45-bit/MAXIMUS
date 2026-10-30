@@ -3,6 +3,7 @@
 from app.models.auth_session import AuthSession
 from app.models.goal import Goal
 from app.models.goal_assessment import GoalAssessment
+from app.models.roadmap import Roadmap, RoadmapMilestone, RoadmapResource, RoadmapTask
 from app.models.user import User
 from app.models.user_onboarding import UserOnboarding
 
@@ -10,6 +11,10 @@ __all__ = [
     "AuthSession",
     "Goal",
     "GoalAssessment",
+    "Roadmap",
+    "RoadmapMilestone",
+    "RoadmapResource",
+    "RoadmapTask",
     "User",
     "UserOnboarding",
 ]

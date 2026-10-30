@@ -51,6 +51,22 @@ services:
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       AUTH_RATE_LIMIT_ATTEMPTS: ${AUTH_RATE_LIMIT_ATTEMPTS:-10}
       AUTH_RATE_LIMIT_WINDOW_SECONDS: ${AUTH_RATE_LIMIT_WINDOW_SECONDS:-60}
+      # AI roadmap generation (Phase 4). With the defaults below the backend
+      # reports generation as "not configured" and never fakes a result.
+      # Credentials must be supplied here (or in .env); they are never exposed
+      # to the frontend container or the browser.
+      AI_PROVIDER: ${AI_PROVIDER:-none}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+      AI_CONNECT_TIMEOUT_SECONDS: ${AI_CONNECT_TIMEOUT_SECONDS:-10}
+      AI_REQUEST_TIMEOUT_SECONDS: ${AI_REQUEST_TIMEOUT_SECONDS:-60}
+      AI_MAX_RETRIES: ${AI_MAX_RETRIES:-2}
+      AI_MAX_OUTPUT_TOKENS: ${AI_MAX_OUTPUT_TOKENS:-4000}
+      AI_TEMPERATURE: ${AI_TEMPERATURE:-0.3}
+      AI_JSON_MODE: ${AI_JSON_MODE:-true}
+      ROADMAP_RATE_LIMIT_ATTEMPTS: ${ROADMAP_RATE_LIMIT_ATTEMPTS:-5}
+      ROADMAP_RATE_LIMIT_WINDOW_SECONDS: ${ROADMAP_RATE_LIMIT_WINDOW_SECONDS:-300}
     ports:
       - '${BACKEND_PORT:-8000}:8000'
     healthcheck:

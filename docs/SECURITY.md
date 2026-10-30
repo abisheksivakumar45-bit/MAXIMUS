@@ -3,7 +3,7 @@
 Security is implemented incrementally. This document records the current
 posture honestly and the controls each phase adds.
 
-## 1. Current posture (Phase 3)
+## 1. Current posture (Phase 4)
 
 - **Authentication.** Users register and log in with an email + password. The
   password is hashed with **Argon2id** (`argon2-cffi`, secure defaults). Login
@@ -23,15 +23,38 @@ posture honestly and the controls each phase adds.
   `DELETE`) must echo it in the `X-CSRF-Token` header — otherwise **403**.
 - **Authorization.** There are no client-supplied user identifiers. Every
   profile/session read derives the user id from the validated session cookie
-  alone, so one user can never read or modify another user's data.
+  alone. The same rule applies to goals, assessments, onboarding, and roadmaps:
+  every repository query is scoped to the authenticated user, and a foreign
+  record is indistinguishable from a missing one (`404` with an identical body).
 - **Rate limiting.** Auth endpoints are protected by an in-process sliding-window
   limiter (`AUTH_RATE_LIMIT_ATTEMPTS` per `AUTH_RATE_LIMIT_WINDOW_SECONDS`);
-  excess requests get **429**.
+  excess requests get **429**. Expensive roadmap generation has its own
+  per-authenticated-user limiter (`ROADMAP_RATE_LIMIT_*`), also **429**.
+- **AI provider security.** Provider calls are backend-only. `AI_API_KEY` is a
+  `repr=False` settings field, never returned by `GET /api/roadmaps/config`,
+  never sent to the frontend, and never logged. The default
+  `AI_PROVIDER=none` disables all outbound AI calls and reports an honest
+  unconfigured state. Connect/request timeouts and bounded retries prevent
+  unbounded hangs; malformed output is rejected before persistence.
+- **Untrusted AI input and output.** Goal text, assessment answers, and
+  onboarding values are treated as untrusted data: control characters are
+  stripped, fields are clipped, the context has a hard ceiling, and the system
+  prompt explicitly denies instructions inside user data. Model output is
+  untrusted too: it must satisfy a strict Pydantic schema (`extra="forbid"`,
+  bounded strings/lists) before any database write. Invalid output returns
+  `502` and saves nothing.
+- **No partial writes.** Roadmap persistence is one transaction after
+  validation; provider failures, timeouts, rate limits, and invalid output leave
+  no roadmap, milestone, task, or resource rows.
+- **Idempotency and duplicate-call protection.** A user-scoped unique
+  `(user_id, generation_key)` constraint plus an optional client key makes retries
+  safe. A replayed key returns the original roadmap (`200`) without another
+  provider call; reusing a key for a different goal returns `409`.
 - **Secrets.** `SECRET_KEY` is **mandatory**: it is validated at startup and the
   backend refuses to start if it is missing or shorter than 32 characters. It is
   held in a `repr=False` settings field. All configuration comes from environment
   variables / `.env`; `.env` is git-ignored and `.env.example` holds placeholders
-  only. `alembic.ini` stores no credentials.
+  only. `alembic.ini` and Compose store no real credentials.
 - **Input validation.** Pydantic schemas validate every request body on the
   backend (email format, display-name bounds, password 10–128 chars with a
   letter and a digit); the frontend validates the same rules client-side.
@@ -50,11 +73,12 @@ posture honestly and the controls each phase adds.
 - **Logging.** Request logging records method and path only — never bodies,
   tokens, or personal data.
 
-## 2. Planned controls (by phase)
+## 2. Controls by phase
 
 | Phase | Control |
 | --- | --- |
-| 4+ | Continued per-user authorization on every new user-owned table (`WHERE user_id = :current_user`). |
+| 4 ✅ | Backend-only AI credentials, strict output validation, prompt-injection hardening, bounded prompts/timeouts, generation rate limiting, idempotency, owner-scoped roadmap access. |
+| 5+ | Continued per-user authorization on every new user-owned table (`WHERE user_id = :current_user`); progress writes require the same ownership checks. |
 | 8 | Practical security learning occurs only in legal, authorised environments. |
 | 12 | Full security review: authorization tests (cross-user access), API input fuzzing, dependency and configuration audit. |
 
@@ -72,6 +96,15 @@ forgotten, cross-user reads/writes return a 404 identical to a missing record
 required fields, length limits), and goal creation is protected by a database
 uniqueness constraint in addition to the application check.
 
+Phase 4 extended them to AI-generated content and roadmap ownership: generation
+is authenticated, eligible goals are checked, the provider is called only when
+configured, prompts are bounded and injection-resistant, responses are strictly
+validated before a single-transaction commit, provider failures never persist
+partial data, idempotency prevents duplicate paid calls, and all roadmap
+reads/approvals are owner-scoped with identical 404s for foreign records. Tests
+cover cross-user access, invalid output, timeouts, retries, key leakage, prompt
+injection, oversized context, rate limits, and duplicate requests.
+
 ## 3. Standing rules
 
 - Never trust a user ID supplied by the client as proof of ownership — always
@@ -79,4 +112,7 @@ uniqueness constraint in addition to the application check.
 - Never expose password hashes, secret keys, database credentials, internal
   stack traces, or another user's data.
 - Never hardcode AI keys or commit credentials.
+- Never send user content to an AI provider without bounds and an explicit
+  purpose; never trust model output before schema validation.
+- Never persist a partial roadmap or report success when the provider failed.
 - Never suppress an error to make a check appear to pass.

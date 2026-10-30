@@ -9,3 +9,5 @@ pydantic-settings==2.16.0
 # Phase 2 — authentication
 argon2-cffi==25.1.0
 email-validator==2.3.0
+# Phase 4 — AI provider HTTP client
+httpx==0.28.1

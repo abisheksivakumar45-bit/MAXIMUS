@@ -336,3 +336,186 @@ def test_phase3_foreign_keys_cascade_on_user_delete(alembic_config) -> None:
             assert onboarding == 0
     finally:
         engine.dispose()
+
+
+def test_upgrade_creates_roadmap_tables(alembic_config) -> None:
+    config, database_url = alembic_config
+
+    command.upgrade(config, "head")
+
+    engine = create_engine(database_url)
+    try:
+        inspector = inspect(engine)
+        tables = set(inspector.get_table_names())
+        assert {
+            "roadmaps",
+            "roadmap_milestones",
+            "roadmap_tasks",
+            "roadmap_resources",
+        } <= tables
+
+        roadmap_columns = {c["name"] for c in inspector.get_columns("roadmaps")}
+        assert roadmap_columns == {
+            "id",
+            "user_id",
+            "goal_id",
+            "title",
+            "description",
+            "objective",
+            "starting_level",
+            "target_level",
+            "estimated_duration_weeks",
+            "status",
+            "provider",
+            "model",
+            "generation_key",
+            "approved_at",
+            "created_at",
+            "updated_at",
+        }
+
+        roadmap_unique = inspector.get_unique_constraints("roadmaps")
+        assert any(
+            set(constraint["column_names"]) == {"user_id", "generation_key"}
+            for constraint in roadmap_unique
+        )
+
+        roadmap_fks = inspector.get_foreign_keys("roadmaps")
+        assert any(fk["referred_table"] == "users" for fk in roadmap_fks)
+        assert any(fk["referred_table"] == "goals" for fk in roadmap_fks)
+
+        milestone_columns = {c["name"] for c in inspector.get_columns("roadmap_milestones")}
+        assert {"roadmap_id", "user_id", "position", "completion_criteria", "status"} <= (
+            milestone_columns
+        )
+
+        task_columns = {c["name"] for c in inspector.get_columns("roadmap_tasks")}
+        assert {"milestone_id", "user_id", "position", "estimated_minutes"} <= task_columns
+
+        resource_columns = {c["name"] for c in inspector.get_columns("roadmap_resources")}
+        assert {"milestone_id", "user_id", "position", "resource_type", "url"} <= (resource_columns)
+    finally:
+        engine.dispose()
+
+
+def test_downgrade_removes_phase4_tables_and_keeps_phase3(alembic_config) -> None:
+    config, database_url = alembic_config
+
+    command.upgrade(config, "head")
+    command.downgrade(config, "0003")
+
+    engine = create_engine(database_url)
+    try:
+        tables = set(inspect(engine).get_table_names())
+        assert "roadmaps" not in tables
+        assert "roadmap_milestones" not in tables
+        assert "roadmap_tasks" not in tables
+        assert "roadmap_resources" not in tables
+        assert {"users", "auth_sessions", "goals", "goal_assessments", "user_onboarding"} <= (
+            tables
+        )
+    finally:
+        engine.dispose()
+
+
+def test_phase4_foreign_keys_cascade_on_user_delete(alembic_config) -> None:
+    """Deleting a user removes roadmaps, milestones, tasks, and resources."""
+    from sqlalchemy import insert, text
+
+    from app import models  # noqa: F401
+
+    config, database_url = alembic_config
+
+    command.upgrade(config, "head")
+
+    owner_id = uuid.UUID("88888888-8888-8888-8888-888888888888")
+    goal_id = uuid.UUID("99999999-9999-9999-9999-999999999999")
+    roadmap_id = uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+    milestone_id = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
+
+    engine = create_engine(database_url)
+
+    @event.listens_for(engine, "connect")
+    def _enable_sqlite_foreign_keys(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
+    try:
+        with engine.begin() as conn:
+            conn.execute(
+                insert(models.User).values(
+                    id=owner_id,
+                    email="roadmap-cascade@example.com",
+                    password_hash="x",
+                    display_name="Roadmap Cascade",
+                )
+            )
+            conn.execute(
+                insert(models.Goal).values(
+                    id=goal_id,
+                    user_id=owner_id,
+                    name="Cascade roadmap goal",
+                    category="custom",
+                )
+            )
+            conn.execute(
+                insert(models.Roadmap).values(
+                    id=roadmap_id,
+                    user_id=owner_id,
+                    goal_id=goal_id,
+                    title="Cascade roadmap",
+                    description="d",
+                    objective="o",
+                    starting_level="a",
+                    target_level="b",
+                    estimated_duration_weeks=4,
+                    provider="stub",
+                    model="stub",
+                )
+            )
+            conn.execute(
+                insert(models.RoadmapMilestone).values(
+                    id=milestone_id,
+                    roadmap_id=roadmap_id,
+                    user_id=owner_id,
+                    position=0,
+                    title="Milestone",
+                    description="d",
+                    estimated_duration_weeks=4,
+                    completion_criteria="c",
+                )
+            )
+            conn.execute(
+                insert(models.RoadmapTask).values(
+                    id=uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc"),
+                    milestone_id=milestone_id,
+                    user_id=owner_id,
+                    position=0,
+                    title="Task",
+                    description="d",
+                )
+            )
+            conn.execute(
+                insert(models.RoadmapResource).values(
+                    id=uuid.UUID("dddddddd-dddd-dddd-dddd-dddddddddddd"),
+                    milestone_id=milestone_id,
+                    user_id=owner_id,
+                    position=0,
+                    title="Resource",
+                    resource_type="article",
+                )
+            )
+
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM users WHERE id = :uid"), {"uid": owner_id.hex})
+            for table in (
+                "roadmaps",
+                "roadmap_milestones",
+                "roadmap_tasks",
+                "roadmap_resources",
+            ):
+                count = conn.execute(text(f"SELECT COUNT(*) FROM {table}")).scalar()
+                assert count == 0, table
+    finally:
+        engine.dispose()

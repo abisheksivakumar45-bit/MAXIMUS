@@ -55,8 +55,8 @@ export const NAV_SECTIONS: NavSection[] = [
         label: 'Roadmaps',
         path: '/roadmaps',
         phase: 4,
-        implemented: false,
-        description: 'Structured, approvable milestones per goal.',
+        implemented: true,
+        description: 'AI-generated, validated, approvable milestones per goal.',
       },
       {
         label: 'Weekly Planning',

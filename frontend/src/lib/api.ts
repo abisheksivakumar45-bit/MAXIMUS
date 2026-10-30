@@ -12,6 +12,12 @@ import type {
   GoalUpdatePayload,
 } from '../types/goal';
 import type { OnboardingSavePayload, OnboardingState } from '../types/onboarding';
+import type {
+  AIConfigStatus,
+  Roadmap,
+  RoadmapGeneratePayload,
+  RoadmapSummary,
+} from '../types/roadmap';
 
 /**
  * Base URL of the MAXIMUS API.
@@ -22,6 +28,13 @@ import type { OnboardingSavePayload, OnboardingState } from '../types/onboarding
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '';
 
 const DEFAULT_TIMEOUT_MS = 10_000;
+
+/**
+ * Roadmap generation can legitimately take a minute: the backend calls an AI
+ * provider with its own 60s request timeout and bounded retries. It therefore
+ * needs a much larger client timeout than ordinary requests.
+ */
+const GENERATION_TIMEOUT_MS = 180_000;
 
 /** Name of the readable cookie holding the CSRF token (double-submit). */
 const CSRF_COOKIE_NAME = 'maximus_csrf';
@@ -174,5 +187,29 @@ export const api = {
     /** Save onboarding progress; `completed: true` is validated server-side. */
     save: (payload: OnboardingSavePayload) =>
       request<OnboardingState>('/api/onboarding', { method: 'PUT', body: payload }),
+  },
+
+  roadmaps: {
+    /** Whether the backend has a real AI provider configured (no secrets). */
+    config: () => request<AIConfigStatus>('/api/roadmaps/config'),
+    /** List the current user's roadmaps (summaries only). */
+    list: () => request<RoadmapSummary[]>('/api/roadmaps'),
+    /** Fetch one roadmap with every milestone, task, and resource. */
+    get: (roadmapId: string) => request<Roadmap>(`/api/roadmaps/${roadmapId}`),
+    /**
+     * Generate a roadmap for one of the user's goals.
+     *
+     * This can call a paid AI provider, so it gets a much longer timeout and
+     * carries an idempotency key supplied by the caller.
+     */
+    generate: (payload: RoadmapGeneratePayload) =>
+      request<Roadmap>('/api/roadmaps/generate', {
+        method: 'POST',
+        body: payload,
+        timeoutMs: GENERATION_TIMEOUT_MS,
+      }),
+    /** Make a roadmap the active plan for its goal. */
+    approve: (roadmapId: string) =>
+      request<Roadmap>(`/api/roadmaps/${roadmapId}/approve`, { method: 'POST' }),
   },
 };

@@ -1,9 +1,9 @@
 """Goal model.
 
 A goal belongs to exactly one user and is the ownership root for everything
-Phase 4+ attaches to it (roadmaps, milestones, weekly objectives, daily tasks,
-progress history). Those tables do not exist yet; they will reference
-``goals.id`` with ``ON DELETE CASCADE``.
+later phases attach to it (roadmaps, milestones, weekly objectives, daily
+tasks, progress history). Roadmaps reference ``goals.id`` with
+``ON DELETE CASCADE``; future planning tables will do the same.
 
 Only attributes shared by *every* goal live here (name, motivation, priority,
 ...). Category-specific onboarding answers live on
@@ -24,6 +24,7 @@ from app.db.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
     from app.models.goal_assessment import GoalAssessment
+    from app.models.roadmap import Roadmap
 
 GOAL_NAME_MAX_LENGTH = 120
 GOAL_AVAILABLE_TIME_MAX_LENGTH = 120
@@ -90,6 +91,11 @@ class Goal(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         "GoalAssessment",
         back_populates="goal",
         uselist=False,
+        cascade="all, delete-orphan",
+    )
+    roadmaps: Mapped[list[Roadmap]] = relationship(
+        "Roadmap",
+        back_populates="goal",
         cascade="all, delete-orphan",
     )
 

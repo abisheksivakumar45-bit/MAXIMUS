@@ -9,17 +9,17 @@ only marked complete when its completion criteria have been verified.
 | 0 | Project inspection and plan | ✅ Done |
 | 1 | Foundation | ✅ Done |
 | 2 | Authentication and profile | ✅ Done |
-| 3 | Goals and onboarding | ⏳ Next |
-| 4 | Roadmap engine | ⬜ Planned |
-| 5 | Weekly and daily planning | ⬜ Planned |
-| 6 | XP and progress | ⬜ Planned |
-| 7 | Nutrition and fitness | ⬜ Planned |
-| 8 | Academics and cybersecurity | ⬜ Planned |
-| 9 | Sleep and discipline | ⬜ Planned |
-| 10 | AI coach | ⬜ Planned |
-| 11 | Adaptive planning | ⬜ Planned |
-| 12 | Security and quality assurance | ⬜ Planned |
-| 13 | Final polish | ⬜ Planned |
+| 3 | Goals and onboarding | ✅ Done |
+| 4 | Roadmap engine and AI provider | ✅ Done |
+| 5 | Weekly and daily planning | ⏳ Next |
+| 6 | XP and progress | ☐ Planned |
+| 7 | Nutrition and fitness | ☐ Planned |
+| 8 | Academics and cybersecurity | ☐ Planned |
+| 9 | Sleep and discipline | ☐ Planned |
+| 10 | AI coach | ☐ Planned |
+| 11 | Adaptive planning | ☐ Planned |
+| 12 | Security and quality assurance | ☐ Planned |
+| 13 | Final polish | ☐ Planned |
 
 ## Phase 0 — Inspection (complete)
 
@@ -30,60 +30,69 @@ only marked complete when its completion criteria have been verified.
 
 ## Phase 1 — Foundation (complete)
 
-Deliverables:
-
-- **Frontend** initialised: React 19 + TypeScript (strict) + Vite + Tailwind v4
-  + React Router, with a typed API service layer.
-- **Backend** initialised: FastAPI + SQLAlchemy 2.x + Pydantic v2 +
-  pydantic-settings, in a layered module structure.
-- **PostgreSQL** configured (v16, named volume, healthcheck).
-- **Docker Compose** orchestrates `db` → `backend` → `frontend` with health
-  dependency handling.
-- **Environment configuration**: `.env.example`, git-ignored `.env`, secrets via
-  environment variables only.
-- **Health endpoints**: `/api/health`, `/api/health/live`, `/api/health/ready`.
-- **Database migrations**: Alembic, baseline revision `0001` creating `users`.
-- **Initial UI shell**: dark-themed layout, sidebar (desktop) and drawer
-  (mobile), Dashboard with real service status, Settings, honest
-  "not-implemented" pages, and a 404 page.
-- **Documentation**: this set plus `README.md`.
-
-Verification (see `IMPLEMENTATION_STATUS.md` for the exact results):
-backend lint + tests, frontend typecheck + tests + build, Docker Compose stack
-startup, migration application, and live health-endpoint checks.
+- React 19 + TypeScript (strict) + Vite + Tailwind v4 + React Router shell with
+  a typed API layer, responsive navigation, real service status, honest
+  placeholders, and a 404 page.
+- FastAPI + SQLAlchemy 2.x + Pydantic v2 + pydantic-settings in a layered
+  structure; PostgreSQL 16 in Compose with a named volume and healthchecks.
+- Health endpoints, strict CORS, safe error handling, Alembic baseline `0001`,
+  Docker Compose orchestration, `.env.example`, and this documentation set.
 
 ## Phase 2 — Authentication and profile (complete)
 
-Deliverables:
+- Registration, login, logout, and session restoration with opaque
+  server-managed sessions; only an HMAC-SHA256 hash of the token is stored.
+- Argon2id password hashing, a generic login error, double-submit CSRF,
+  auth-endpoint rate limiting, protected/public-only routes, and a display-name
+  profile page.
+- Migration `0002` (`auth_sessions`); mandatory validated `SECRET_KEY`.
 
-- **Registration / login / logout / session restoration**: `POST
-  /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET
-  /api/auth/me`.
-- **Sessions**: opaque server-managed sessions stored in an `HttpOnly`,
-  `SameSite=Lax` cookie; only an HMAC-SHA256 hash persisted in `auth_sessions`.
-- **Password hashing**: Argon2id via `argon2-cffi`.
-- **CSRF**: double-submit token enforced on every state-changing method.
-- **Rate limiting**: sliding-window limiter on auth endpoints (429 on excess).
-- **Profile**: `GET /api/profile`, `PATCH /api/profile` (display name only;
-  email read-only), identity always derived from the session.
-- **Migration `0002`**: `auth_sessions` with FK `ON DELETE CASCADE` and unique
-  token-hash index (additive; no existing data touched).
-- **Frontend**: `AuthProvider`, protected/public route guards, Login,
-  Register, and Profile pages with accessible validation and password
-  visibility toggle; header/sidebar account block with logout.
-- **Configuration**: `SECRET_KEY` now mandatory (≥ 32 chars) and validated at
-  startup; `SESSION_LIFETIME_DAYS`, `COOKIE_SECURE`, and `AUTH_RATE_LIMIT_*`
-  added to `.env.example` and Compose.
+## Phase 3 — Goals and onboarding (complete)
 
-Verification (see `IMPLEMENTATION_STATUS.md` for the exact results): backend
-lint + 43 tests, frontend typecheck + 32 tests + build, migration applied to
-the live PostgreSQL, and live end-to-end checks of register/login/logout,
-CSRF, rate limiting, CORS, cookie flags, and Argon2id hashing.
+- Canonical goal categories with per-category assessment questions.
+- Goal CRUD with duplicate protection and per-user isolation (identical `404`
+  for missing and foreign records).
+- Resumable multi-step onboarding with a server-authoritative completion gate;
+  draft goals activate on completion.
+- Migration `0003` (`goals`, `goal_assessments`, `user_onboarding`); a
+  production-lifecycle regression test for request-scoped commits.
 
-## Phase 3 — Goals and onboarding (next)
+## Phase 4 — Roadmap engine and AI provider (complete)
+
+- **Schema and migration `0004`**: `roadmaps`, `roadmap_milestones`,
+  `roadmap_tasks`, and `roadmap_resources`, with ordered positions, statuses,
+  provider/model provenance, and cascade ownership.
+- **Provider abstraction**: an `AIProvider` protocol plus an OpenAI-compatible
+  implementation using `httpx`; configurable base URL, model, connect/read
+  timeouts, bounded retries, JSON mode, and output limits.
+- **Strict output contract**: Pydantic models with `extra="forbid"` and bounded
+  strings/lists; malformed, truncated, or oversized responses are rejected.
+- **Generation service**: authenticated flow from goal + assessment + onboarding
+  context to a bounded, injection-resistant prompt, provider call, validation,
+  and single-transaction persistence. Provider failures leave no record.
+- **Idempotency and safety**: optional idempotency keys (unique per user),
+  duplicate-key conflict detection, an in-process duplicate-call guard, and a
+  per-user generation rate limit.
+- **API**: `GET /api/roadmaps/config`, `GET /api/roadmaps`,
+  `POST /api/roadmaps/generate`, `GET /api/roadmaps/{id}`, and
+  `POST /api/roadmaps/{id}/approve`, all authenticated and owner-scoped.
+- **Approval**: making a roadmap active archives the previous active plan for
+  the same goal instead of deleting history.
+- **Frontend**: protected `/roadmaps` listing + generation panel (loading,
+  honest unconfigured state, empty state, errors with safe retry) and
+  `/roadmaps/:id` detail page with overview, ordered milestones, tasks,
+  resources, statuses, and approval. Settings shows real provider status.
+- **Configuration**: `AI_*` and `ROADMAP_RATE_LIMIT_*` added to `.env.example`
+  and Compose. Default `AI_PROVIDER=none` keeps the stack fully offline and
+  makes generation report that it is not configured.
+- **Verification**: 130 backend tests, 83 frontend tests, lint/format/typecheck/
+  build/audit clean, migration `0004` applied live, and a 32/32 live API
+  journey against a local mock provider. No real paid AI call was made.
 
 ## Scope discipline
 
 Later-phase features are **not** started before the preceding phase's criteria
 are met and verified. Planned UI areas render an honest placeholder until their
-phase lands.
+phase lands. Weekly/daily planning, progress tracking, XP, nutrition, fitness,
+academics, sleep, AI coaching, and adaptive planning remain unavailable and are
+labelled as such.

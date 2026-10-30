@@ -11,6 +11,8 @@ import { RegisterPage } from '../features/auth/RegisterPage';
 import { DashboardPage } from '../features/dashboard/DashboardPage';
 import { GoalsPage } from '../features/goals/GoalsPage';
 import { OnboardingPage } from '../features/onboarding/OnboardingPage';
+import { RoadmapDetailPage } from '../features/roadmaps/RoadmapDetailPage';
+import { RoadmapsPage } from '../features/roadmaps/RoadmapsPage';
 import { SettingsPage } from '../features/settings/SettingsPage';
 import { NotFoundPage } from '../features/shared/NotFoundPage';
 import { PlaceholderPage } from '../features/shared/PlaceholderPage';
@@ -41,6 +43,8 @@ export function AppRoutes() {
           <Route index element={<DashboardPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="goals" element={<GoalsPage />} />
+          <Route path="roadmaps" element={<RoadmapsPage />} />
+          <Route path="roadmaps/:roadmapId" element={<RoadmapDetailPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           {plannedItems.map((item) => (
             <Route

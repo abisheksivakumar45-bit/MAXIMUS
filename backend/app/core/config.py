@@ -57,6 +57,29 @@ class Settings(BaseSettings):
     auth_rate_limit_attempts: int = Field(default=10, ge=1)
     auth_rate_limit_window_seconds: int = Field(default=60, ge=1)
 
+    # --- AI roadmap generation (Phase 4) --------------------------------------
+    # ``none`` keeps the application fully functional without any outbound AI
+    # call: roadmap generation reports that it is not configured instead of
+    # pretending to succeed. ``openai`` talks to any OpenAI-compatible
+    # Chat Completions endpoint (OpenAI, OpenRouter, Groq, local runtimes, ...).
+    ai_provider: Literal["none", "openai"] = "none"
+    # Secrets are never logged or serialised (repr=False) and never leave the
+    # backend. An empty key simply means "not configured", not a startup error.
+    ai_api_key: str = Field(default="", repr=False)
+    ai_model: str = ""
+    ai_base_url: str = "https://api.openai.com/v1"
+    ai_connect_timeout_seconds: float = Field(default=10.0, ge=1, le=60)
+    ai_request_timeout_seconds: float = Field(default=60.0, ge=5, le=300)
+    ai_max_retries: int = Field(default=2, ge=0, le=5)
+    ai_max_output_tokens: int = Field(default=4000, ge=256, le=16000)
+    ai_temperature: float = Field(default=0.3, ge=0, le=2)
+    ai_json_mode: bool = True
+
+    # Roadmap generation is expensive (external API + large prompt): limit it
+    # per authenticated user rather than per IP.
+    roadmap_rate_limit_attempts: int = Field(default=5, ge=1)
+    roadmap_rate_limit_window_seconds: int = Field(default=300, ge=1)
+
     @property
     def cors_origins(self) -> list[str]:
         return [origin.strip() for origin in self.backend_cors_origins.split(",") if origin.strip()]

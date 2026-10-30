@@ -85,8 +85,8 @@ export function AppLayout() {
         </main>
 
         <footer className="border-line text-faint border-t px-4 py-4 text-xs sm:px-6 lg:px-8">
-          MAXIMUS v0.1.0 — Phase 2: accounts, sessions, and profiles. Features in development
-          are labelled honestly in the UI.
+          MAXIMUS v0.1.0 — Personal growth system. Features in development are labelled
+          honestly in the UI.
         </footer>
       </div>
     </div>

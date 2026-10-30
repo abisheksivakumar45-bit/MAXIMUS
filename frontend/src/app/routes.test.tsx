@@ -62,6 +62,15 @@ function stubAuthenticated() {
   stubFetch(({ url }) => {
     if (url.includes('/api/auth/me')) return jsonResponse(USER);
     if (url.includes('/api/onboarding')) return jsonResponse(ONBOARDING_STATE);
+    if (url.includes('/api/roadmaps/config')) {
+      return jsonResponse({
+        configured: false,
+        provider: 'none',
+        model: null,
+        message: 'AI roadmap generation is not configured.',
+      });
+    }
+    if (url.endsWith('/api/roadmaps')) return jsonResponse([]);
     if (url.includes('/api/goals/categories')) return jsonResponse([]);
     if (url.includes('/api/goals')) return jsonResponse([]);
     return jsonResponse({ detail: 'Not found' }, 404);
@@ -117,5 +126,35 @@ describe('Phase 3 routes', () => {
     renderAt('/onboarding');
 
     expect(await screen.findByRole('button', { name: 'Get started' })).toBeInTheDocument();
+  });
+});
+
+describe('Phase 4 routes', () => {
+  it('redirects anonymous visitors away from /roadmaps', async () => {
+    stubAnonymous();
+
+    renderAt('/roadmaps');
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('redirects anonymous visitors away from a roadmap detail URL', async () => {
+    stubAnonymous();
+
+    renderAt('/roadmaps/roadmap-1');
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('renders the real roadmaps page for a signed-in user', async () => {
+    stubAuthenticated();
+
+    renderAt('/roadmaps');
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Roadmaps' })).toBeInTheDocument();
+    expect(await screen.findByText('AI generation is not configured')).toBeInTheDocument();
+    expect(await screen.findByText('No roadmaps yet')).toBeInTheDocument();
+    // Not the planned placeholder.
+    expect(screen.queryByText('Not implemented yet')).not.toBeInTheDocument();
   });
 });

@@ -15,7 +15,7 @@ SQLAlchemy 2.x models and Alembic migrations.
   tokens only as HMAC hashes — no plaintext credential or token is ever
   persisted.
 
-## 2. Current tables (Phase 3)
+## 2. Current tables (Phase 4)
 
 ### `users`
 
@@ -48,7 +48,7 @@ Added in migration `0002`. One row per active (or revoked) login session.
 ### `goals`
 
 Added in migration `0003`. One row per goal; the ownership root for
-Phase 4+ (roadmaps, tasks, progress history will reference `goals.id`).
+Phase 5+ (weekly plans, daily tasks, progress history will reference `goals.id`).
 
 | Column | Type | Notes |
 | --- | --- | --- |
@@ -98,16 +98,90 @@ Goal selection is **not** duplicated here — the user's goals are the truth.
 | `completed_at` | TIMESTAMPTZ | Nullable; set **by the server** only once every required answer exists. |
 | `created_at` / `updated_at` | TIMESTAMPTZ | Server defaults. |
 
-Roadmaps, daily tasks, XP transactions, and the remaining Phase 4+ tables are
+### `roadmaps`
+
+Added in migration `0004`. One row per generated plan; belongs to exactly one
+user and one goal. The full hierarchy is normalised rather than stored as a JSON
+blob, so later progress/adaptation can attach to real rows.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Primary key. |
+| `user_id` | UUID | FK → `users.id`, `ON DELETE CASCADE`, indexed. Denormalised owner for scoped reads. |
+| `goal_id` | UUID | FK → `goals.id`, `ON DELETE CASCADE`, indexed. Deleting a goal removes its plans. |
+| `title` | VARCHAR(160) | Required. |
+| `description`, `objective` | TEXT | Required overview and objective. |
+| `starting_level`, `target_level` | VARCHAR(120) | Required. |
+| `estimated_duration_weeks` | INTEGER | Required. |
+| `status` | VARCHAR(16) | `draft` / `active` / `archived`; default `draft`, indexed. |
+| `provider`, `model` | VARCHAR(32) / VARCHAR(100) | Provenance of the generated content (never a credential). |
+| `generation_key` | VARCHAR(64) | Nullable client idempotency key, unique per user (`uq_roadmaps_user_generation_key`). |
+| `approved_at` | TIMESTAMPTZ | Nullable; set when the roadmap becomes active. |
+| `created_at` / `updated_at` | TIMESTAMPTZ | Server defaults. |
+
+Approving a roadmap sets it `active` and archives any other `active` roadmap for
+the same goal (the previous plan is kept, not deleted).
+
+### `roadmap_milestones`
+
+Added in migration `0004`. Ordered phases inside a roadmap.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Primary key. |
+| `roadmap_id` | UUID | FK → `roadmaps.id`, `ON DELETE CASCADE`, indexed. |
+| `user_id` | UUID | FK → `users.id`, `ON DELETE CASCADE`, indexed. |
+| `position` | INTEGER | Zero-based order; unique with `roadmap_id`. |
+| `title` | VARCHAR(160) | Required. |
+| `description`, `completion_criteria` | TEXT | Required. |
+| `estimated_duration_weeks` | INTEGER | Required. |
+| `status` | VARCHAR(16) | `pending` (default) / `in_progress` / `completed` / `skipped`; Phase 4 writes only `pending`. |
+| `created_at` / `updated_at` | TIMESTAMPTZ | Server defaults. |
+
+### `roadmap_tasks`
+
+Added in migration `0004`. Actionable items inside a milestone.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Primary key. |
+| `milestone_id` | UUID | FK → `roadmap_milestones.id`, `ON DELETE CASCADE`, indexed. |
+| `user_id` | UUID | FK → `users.id`, `ON DELETE CASCADE`, indexed. |
+| `position` | INTEGER | Zero-based order; unique with `milestone_id`. |
+| `title` | VARCHAR(200) | Required. |
+| `description` | TEXT | Required. |
+| `estimated_minutes` | INTEGER | Nullable. |
+| `completion_criteria` | TEXT | Nullable. |
+| `status` | VARCHAR(16) | Same item status set; default `pending`. |
+| `created_at` / `updated_at` | TIMESTAMPTZ | Server defaults. |
+
+### `roadmap_resources`
+
+Added in migration `0004`. Optional learning resources attached to a milestone.
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | UUID | Primary key. |
+| `milestone_id` | UUID | FK → `roadmap_milestones.id`, `ON DELETE CASCADE`, indexed. |
+| `user_id` | UUID | FK → `users.id`, `ON DELETE CASCADE`, indexed. |
+| `position` | INTEGER | Zero-based order; unique with `milestone_id`. |
+| `title` | VARCHAR(200) | Required. |
+| `resource_type` | VARCHAR(32) | `book` / `course` / `video` / `article` / `practice` / `tool` / `other`. |
+| `url` | VARCHAR(500) | Nullable; validated as an HTTP(S) URL in the AI output schema. |
+| `note` | TEXT | Nullable. |
+| `created_at` / `updated_at` | TIMESTAMPTZ | Server defaults. |
+
+Weekly plans, daily tasks, XP transactions, and the remaining Phase 5+ tables are
 introduced in the phases that implement their features — see
 `docs/DEVELOPMENT_PLAN.md`. Tables are added only when justified by real
 implementation, never speculatively.
 
 ## 3. Migrations
 
-Applied revisions (as of Phase 3): `0001` (baseline `users`) → `0002`
-(`auth_sessions`) → `0003` (`goals`, `goal_assessments`, `user_onboarding`).
-Alembic reads `DATABASE_URL` from the environment
+Applied revisions (as of Phase 4): `0001` (baseline `users`) → `0002`
+(`auth_sessions`) → `0003` (`goals`, `goal_assessments`, `user_onboarding`) →
+`0004` (`roadmaps`, `roadmap_milestones`, `roadmap_tasks`,
+`roadmap_resources`). Alembic reads `DATABASE_URL` from the environment
 (`alembic/env.py`); the URL is never stored in `alembic.ini` or version control.
 
 ```bash
@@ -136,6 +210,9 @@ Rules:
 The pytest suite provisions an in-memory SQLite database via
 `Base.metadata.create_all` and rolls back per test. This is intentional and
 isolated from real data: it verifies model/schema/endpoint behaviour quickly.
+`test_migrations.py` additionally runs the real Alembic chain (upgrade to head,
+downgrade through `0004`) against a temporary database, and roadmap tests verify
+goal-deletion cascades across all four tables.
 
 Migration correctness against PostgreSQL is verified operationally (see the
 verification log in `docs/IMPLEMENTATION_STATUS.md`) using

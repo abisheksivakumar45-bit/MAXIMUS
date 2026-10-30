@@ -40,11 +40,13 @@ describe('Sidebar', () => {
     );
 
     const primaryNav = screen.getByRole('navigation', { name: /primary/i });
-    // Planned items carry the "soon" marker; implemented ones (Goals since
-    // Phase 3) do not.
+    // Planned items carry the "soon" marker; implemented ones (Goals in Phase 3,
+    // Roadmaps in Phase 4) do not.
     const goalsLink = within(primaryNav).getByRole('link', { name: /goals/i });
     expect(within(goalsLink).queryByText('soon')).not.toBeInTheDocument();
     const roadmapsLink = within(primaryNav).getByRole('link', { name: /roadmaps/i });
-    expect(within(roadmapsLink).getByText('soon')).toBeInTheDocument();
+    expect(within(roadmapsLink).queryByText('soon')).not.toBeInTheDocument();
+    const weeklyLink = within(primaryNav).getByRole('link', { name: /weekly planning/i });
+    expect(within(weeklyLink).getByText('soon')).toBeInTheDocument();
   });
 });

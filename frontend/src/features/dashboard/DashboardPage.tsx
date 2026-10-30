@@ -36,7 +36,7 @@ export function DashboardPage() {
           />
           <EmptyState
             title="No daily tasks yet"
-            description="The daily planning engine — which turns approved weekly objectives into scheduled tasks with XP rewards — is scheduled for Phase 5."
+            description="The daily planning engine — which turns approved weekly objectives into scheduled tasks — arrives in Phase 5. XP and progress tracking arrive in Phase 6."
             hint="Nothing is simulated here: this section stays empty until real tasks exist."
           />
         </Card>

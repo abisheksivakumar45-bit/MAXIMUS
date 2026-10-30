@@ -1,18 +1,25 @@
+import { useCallback } from 'react';
+
 import { Card, CardHeader } from '../../components/ui/Card';
-import { EmptyState } from '../../components/ui/EmptyState';
 import { ErrorState } from '../../components/ui/ErrorState';
 import { LoadingState } from '../../components/ui/LoadingState';
 import { PageHeader } from '../../components/ui/PageHeader';
 import { StatusPill } from '../../components/ui/StatusPill';
+import { useApiResource } from '../../hooks/useApiResource';
 import { useServiceHealth } from '../../hooks/useServiceHealth';
+import { api } from '../../lib/api';
+import type { AIConfigStatus } from '../../types/roadmap';
 
-/** Settings. Phase 1 exposes real environment/service information only. */
+/** Settings. Shows real environment/service information and AI provider status. */
 export function SettingsPage() {
   const { health, readiness } = useServiceHealth();
+  const loadAiConfig = useCallback(() => api.roadmaps.config(), []);
+  const aiConfig = useApiResource<AIConfigStatus>(loadAiConfig);
 
   const retry = () => {
     health.reload();
     readiness.reload();
+    aiConfig.reload();
   };
 
   return (
@@ -77,12 +84,40 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="AI provider" description="Roadmaps, coaching, and personalisation." />
-        <EmptyState
-          title="Not configured"
-          description="MAXIMUS has no AI provider wired up yet. The provider abstraction, structured-output validation, and honest failure handling are introduced in Phase 4."
-          hint="No AI-generated content is produced or displayed anywhere in Phase 1."
+        <CardHeader
+          title="AI provider"
+          description="Whether the backend can generate validated roadmaps."
         />
+        {aiConfig.status === 'loading' ? <LoadingState /> : null}
+        {aiConfig.status === 'error' ? (
+          <ErrorState message={aiConfig.error.message} onRetry={aiConfig.reload} />
+        ) : null}
+        {aiConfig.status === 'success' ? (
+          <div className="flex flex-col gap-3 text-sm">
+            <p>
+              <StatusPill
+                tone={aiConfig.data.configured ? 'positive' : 'warning'}
+                label={aiConfig.data.configured ? 'Configured' : 'Not configured'}
+                withDot
+              />
+            </p>
+            <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+              <div>
+                <dt className="text-faint text-xs uppercase">Provider</dt>
+                <dd className="text-ink mt-0.5">{aiConfig.data.provider}</dd>
+              </div>
+              <div>
+                <dt className="text-faint text-xs uppercase">Model</dt>
+                <dd className="text-ink mt-0.5">{aiConfig.data.model ?? 'None selected'}</dd>
+              </div>
+            </dl>
+            <p className="text-muted">{aiConfig.data.message}</p>
+            <p className="text-faint text-xs">
+              The API key is stored on the backend only. It is never sent to the browser, logged,
+              or included in API responses.
+            </p>
+          </div>
+        ) : null}
       </Card>
     </div>
   );

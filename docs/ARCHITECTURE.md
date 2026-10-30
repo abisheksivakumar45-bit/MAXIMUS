@@ -24,6 +24,11 @@ Three services, orchestrated locally by Docker Compose (`db`, `backend`,
 which proxies `/api` to the backend — so no CORS is required for the normal
 local flow, and the same frontend build works behind a single origin later.
 
+Roadmap generation adds one **optional backend-only egress**: the backend may
+call a configured OpenAI-compatible Chat Completions endpoint. The browser never
+talks to the provider and never receives the API key. With `AI_PROVIDER=none`
+(default), there is no external call at all.
+
 ## 2. Repository layout
 
 ```
@@ -34,12 +39,14 @@ MAXIMUS/
 │   │   ├── core/            config, logging, security (hashing/tokens),
 │   │   │                    rate_limit, csrf
 │   │   ├── db/              declarative base, mixins, engine/session factory
-│   │   ├── models/          SQLAlchemy ORM models (user, auth_session)
+│   │   ├── ai/              provider protocol, OpenAI-compatible client,
+│   │   │                    prompt builder, strict output schema
+│   │   ├── models/          SQLAlchemy ORM models (user, session, goal, roadmap)
 │   │   ├── schemas/         Pydantic request/response schemas
-│   │   ├── repositories/    data access (user, session)
-│   │   ├── services/        business logic (auth_service)
-│   │   ├── api/             deps (current user) + routes (thin: delegate)
-│   │   └── tests/           pytest suite (runs on SQLite, no DB required)
+│   │   ├── repositories/    data access (user, session, goal, roadmap)
+│   │   ├── services/        business logic (auth, goal, onboarding, roadmap)
+│   │   ├── api/             deps (current user, provider) + thin routes
+│   │   └── tests/           pytest suite (SQLite; AI mocked)
 │   ├── alembic/             versioned migrations
 │   ├── requirements*.txt    pinned dependencies
 │   └── Dockerfile
@@ -49,7 +56,10 @@ MAXIMUS/
 │   │   ├── components/      reusable UI + layout (Sidebar, Card, states)
 │   │   ├── features/        one folder per product area
 │   │   │   ├── auth/        AuthContext, guards, layouts, pages, validation
-│   │   │   ├── dashboard/   Dashboard + real service status card
+│   │   │   ├── dashboard/   Dashboard + real service/status cards
+│   │   │   ├── goals/       category-driven goal CRUD + assessments
+│   │   │   ├── onboarding/  resumable multi-step wizard
+│   │   │   ├── roadmaps/    listing, generation, detail, approval
 │   │   │   ├── settings/    environment/service/database/AI status
 │   │   │   └── shared/      honest placeholder + 404 pages
 │   │   ├── hooks/           useApiResource, useServiceHealth
@@ -67,9 +77,11 @@ MAXIMUS/
 ## 3. Backend architecture
 
 - **Layering.** Routes stay thin; business logic lives in `services/`
-  (`auth_service`). Data access is encapsulated in `repositories/` (user, session)
-  and ORM models. AI orchestration will live in `ai/`, planning logic in
-  `planning/` (both Phase 4+).
+  (`auth_service`, `goal_service`, `onboarding_service`, `roadmap_service`).
+  Data access is encapsulated in `repositories/` (user, session, goal, roadmap)
+  and ORM models. The AI provider sits behind `ai.provider.AIProvider`, so the
+  roadmap service never imports HTTP or provider-specific types. Planning logic
+  lands in `planning/` in Phase 5.
 - **App factory.** `app.main.create_app()` builds the `FastAPI` instance so
   tests can construct isolated apps and override dependencies.
 - **Configuration.** `app.core.config.Settings` (pydantic-settings) reads
@@ -87,6 +99,14 @@ MAXIMUS/
 - **Middleware.** CSRF double-submit (`core/csrf.py`), credential-enabled strict
   CORS, and an in-process sliding-window rate limiter (`core/rate_limit.py`)
   wrap the app.
+- **AI provider.** `ai/provider.py` defines the protocol and safe exception
+  hierarchy; `ai/openai_provider.py` implements an OpenAI-compatible
+  `/chat/completions` call with configurable base URL/model, connect + request
+  timeouts, bounded retries, JSON mode, and strict parsing. `ai/factory.py`
+  builds the provider from settings and exposes only non-sensitive status.
+  `services/roadmap_service.py` owns eligibility, idempotency, prompt building,
+  validation, one-transaction persistence, and approval. Provider failures are
+  mapped to safe `502`/`503`/`504` responses and never leave partial rows.
 - **Migrations.** Alembic owns the schema. The backend container runs
   `alembic upgrade head` before starting. `create_all()` is used **only** in
   tests, never against a real database.
@@ -106,7 +126,9 @@ MAXIMUS/
 - **Data layer.** All HTTP goes through `src/lib/api.ts`, which centralises the
   base URL, timeouts (`AbortController`), `credentials: 'include'`, the
   `X-CSRF-Token` header on state-changing requests, and error normalisation into
-  `ApiError`. Components never call `fetch` directly.
+  `ApiError`. Components never call `fetch` directly. Roadmap generation uses a
+  longer client timeout (180s) because it may wait on the provider; every other
+  request keeps the 10s default.
 - **Auth state.** `features/auth/AuthContext.tsx` is the single source of truth
   for the signed-in user. It restores state on load by calling `GET /api/auth/me`
   (which also bootstraps the CSRF cookie) and exposes `register`/`login`/`logout`.
@@ -115,6 +137,11 @@ MAXIMUS/
 - **Async state.** `useApiResource` exposes an explicit discriminated union
   (`loading | success | error`) plus `reload`, so every consumer handles all
   states. Loading, error (with retry) and empty states are real components.
+- **Roadmaps.** `/roadmaps` loads provider status, eligible goals, and saved
+  summaries. Generation is hidden when the backend reports no provider; a
+  failed attempt keeps the same idempotency key for a safe retry. The detail
+  page renders only persisted milestones/tasks/resources and read-only statuses;
+  approval re-fetches the server state.
 - **Navigation model.** `src/app/navigation.ts` is the single source of truth
   for the sidebar and routes. Routes marked `implemented: false` render an
   honest "not implemented yet — Phase N" page. There are no dead links and no
@@ -134,6 +161,11 @@ MAXIMUS/
 | Double-submit CSRF with `SameSite=Lax` cookies | Cheap, stateless, and effective for a cookie-authenticated API without an extra double-submit store. |
 | Argon2id via `argon2-cffi` | Memory-hard, current best practice; parameter tuning left at library defaults. |
 | Tests run on SQLite | Fast, isolated, no external dependency. PostgreSQL behaviour (migrations, types) is verified against the real container separately. |
+| OpenAI-compatible provider behind a protocol | Works with OpenAI, OpenRouter, Groq, or local runtimes without leaking vendor types into business logic; providers are swappable. |
+| Strict Pydantic output with `extra="forbid"` | An LLM response is untrusted input; unknown fields, missing fields, and oversized content are rejected before persistence. |
+| Idempotency key + database unique constraint | A retried request after a network error cannot create or pay for a second roadmap; the in-process guard only reduces duplicate concurrent calls. |
+| Default `AI_PROVIDER=none` | The app runs fully offline; generation reports "not configured" instead of faking output or failing at startup. |
+| Approval archives older plans | Preserves plan history without allowing multiple active plans per goal. |
 | Vite dev-server `/api` proxy | Same-origin requests in development; cookies work without CORS complexity. |
 | Recharts deferred to Phase 6 | No charts exist yet; avoid unused dependencies. |
 | No bind mounts in Compose | Predictable, reproducible startup; hot reload is available by running services locally. |
@@ -141,11 +173,19 @@ MAXIMUS/
 
 ## 6. Deliberate limitations
 
-- Implemented so far: authentication, profile, goals, and onboarding. Roadmaps,
-  planning, tracking, and AI are Phase 4+. The API exposes health, auth,
-  profile, goals, and onboarding endpoints only.
-- No AI provider integration (Phase 4). The Settings page states this plainly.
-- Roadmaps, daily tasks, XP, and the other Phase 4+ tables do not exist.
-- Rate limiting is in-process and per-instance (not shared across replicas).
+- Implemented so far: authentication, profile, goals, onboarding, roadmaps, and
+  AI roadmap generation. Weekly/daily planning, progress tracking, XP, nutrition,
+  fitness, coaching, and adaptive planning are later phases. The API exposes
+  health, auth, profile, goals, onboarding, and roadmap endpoints only.
+- Real AI generation requires explicit credentials. The default stack reports
+  `configured: false` and returns `503` for generation; it never fabricates a
+  roadmap. No real paid provider call was made during verification.
+- The provider is called synchronously; there is no background job or streaming.
+- Rate limiting and the duplicate-call guard are in-process and per-instance
+  (not shared across replicas).
+- AI output is structurally validated, not fact-checked; prompt injection is
+  mitigated, not eliminated.
+- Roadmap/task statuses are read-only in Phase 4; progress tracking is Phase 5.
+- Daily tasks, XP, and the other later-phase tables do not exist.
 - The frontend Docker image runs the Vite dev server, not a hardened static
   server.
